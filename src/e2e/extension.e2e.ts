@@ -94,18 +94,7 @@ async function run() {
     assert(contentResult.ok, `content script responded: ${contentResult.reason}`);
     console.log('Content script OK:', JSON.stringify(contentResult.response));
 
-    // Side panel smoke test
-    const sidePanelPage = await browser.newPage();
-    await sidePanelPage.goto(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
-    await new Promise((r) => setTimeout(r, 500));
-    const hasInput = await sidePanelPage.evaluate(() => !!document.querySelector('#input'));
-    const hasSend = await sidePanelPage.evaluate(() => !!document.querySelector('#sendBtn'));
-    assert(hasInput, 'side panel has #input');
-    assert(hasSend, 'side panel has #sendBtn');
-    console.log('Side panel OK');
-    await sidePanelPage.close();
-
-    // Native messaging end-to-end
+    // Native messaging end-to-end (background channel)
     const nativeResult = await worker.evaluate(async () => {
       const received: unknown[] = [];
       const port = chrome.runtime.connectNative('com.pi.browser_agent');
@@ -135,6 +124,43 @@ async function run() {
     assert(nativeResult.hasToolResult, 'received tool_result from native host');
     assert(nativeResult.hasDone, 'received done from native host');
     console.log('Native messaging OK:', JSON.stringify(nativeResult.types));
+
+    // Manual UI flow: open side panel page, type, send, and observe results
+    const sidePanelPage = await browser.newPage();
+    await sidePanelPage.goto(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
+    await new Promise((r) => setTimeout(r, 500));
+    const hasInput = await sidePanelPage.evaluate(() => !!document.querySelector('#input'));
+    const hasSend = await sidePanelPage.evaluate(() => !!document.querySelector('#sendBtn'));
+    assert(hasInput, 'side panel has #input');
+    assert(hasSend, 'side panel has #sendBtn');
+    console.log('Side panel UI opened');
+
+    // Bridge native host responses into runtime messages so the side panel UI renders them
+    await worker.evaluate(async () => {
+      const port = chrome.runtime.connectNative('com.pi.browser_agent');
+      port.onMessage.addListener((msg: any) => chrome.runtime.sendMessage(msg).catch(() => {}));
+      chrome.runtime.onMessage.addListener((msg: any) => {
+        if (msg.type === 'user') port.postMessage(msg);
+      });
+    });
+
+    await sidePanelPage.type('#input', 'click the load-more button');
+    await sidePanelPage.click('#sendBtn');
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const uiResult = await sidePanelPage.evaluate(() => {
+      const chat = document.getElementById('chat') as HTMLDivElement;
+      const toolNames = Array.from(chat.querySelectorAll('.tool-name')).map((el) => el.textContent);
+      const completion = chat.querySelector('.completion-summary')?.textContent;
+      const userBubbles = chat.querySelectorAll('.message.user').length;
+      return { toolNames, completion, userBubbles };
+    });
+    assert(uiResult.userBubbles >= 1, 'side panel rendered user message');
+    assert(uiResult.toolNames.includes('browser_scroll'), 'side panel rendered browser_scroll tool');
+    assert(uiResult.toolNames.includes('browser_click'), 'side panel rendered browser_click tool');
+    assert(uiResult.completion, 'side panel rendered completion card');
+    console.log('Side panel UI flow OK:', JSON.stringify(uiResult));
+    await sidePanelPage.close();
 
     await page.close();
     console.log('\nAll e2e assertions passed.');
