@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { encodeMessage, decodeMessages } from './protocol.js';
-import type { Message, UserMessage } from '../shared/messages.js';
+import type { Message, UserMessage, ErrorMessage } from '../shared/messages.js';
 
 export class PiSession {
   private child: ChildProcessWithoutNullStreams;
@@ -10,6 +10,27 @@ export class PiSession {
 
   constructor(piCommand: string, args: string[] = []) {
     this.child = spawn(piCommand, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+    this.child.on('error', (err: Error) => {
+      const msg: ErrorMessage = { type: 'error', message: err.message };
+      this.onMessage(msg);
+    });
+
+    this.child.stdin.on('error', (err: Error) => {
+      const msg: ErrorMessage = { type: 'error', message: `stdin error: ${err.message}` };
+      this.onMessage(msg);
+    });
+
+    this.child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+      if (code !== 0 && code !== null) {
+        const msg: ErrorMessage = {
+          type: 'error',
+          message: `child exited with code ${code}${signal ? ` (signal ${signal})` : ''}`,
+        };
+        this.onMessage(msg);
+      }
+    });
+
     this.child.stdout.on('data', (chunk: Buffer) => this.handleData(chunk));
     this.child.stderr.on('data', (chunk: Buffer) => {
       console.error('[pi stderr]', chunk.toString('utf8'));
@@ -20,7 +41,9 @@ export class PiSession {
     const msg: UserMessage = { type: 'user', text };
     const encoded = encodeMessage(msg);
     this.onChildStdin(encoded);
-    this.child.stdin.write(encoded);
+    if (!this.child.stdin.destroyed && this.child.stdin.writable) {
+      this.child.stdin.write(encoded);
+    }
   }
 
   private handleData(chunk: Buffer) {
@@ -33,6 +56,8 @@ export class PiSession {
   }
 
   close() {
-    this.child.kill();
+    if (!this.child.killed) {
+      this.child.kill();
+    }
   }
 }
