@@ -30,9 +30,11 @@
 ├── docs/superpowers/plans/            # this plan
 ├── package.json
 ├── tsconfig.json
-├── scripts/
-│   └── install-host.ts                # registers native messaging host manifest
 ├── src/
+│   ├── scripts/
+│   │   ├── copy-assets.ts             # copies static extension assets to dist
+│   │   ├── install-host.ts            # registers native messaging host manifest
+│   │   └── mock-pi.ts                 # test fake Pi CLI
 │   ├── extension/
 │   │   ├── manifest.json              # MV3 manifest
 │   │   ├── sidepanel.html             # side panel markup
@@ -50,11 +52,11 @@
 │   │   ├── index.ts                   # native host entry
 │   │   ├── protocol.ts                # length-prefixed JSON framing
 │   │   └── pi.ts                      # Pi CLI spawn + stdio wrapper
-│   └── shared/
-│       └── messages.ts                # message types shared by ext + host
-├── tests/
-│   ├── protocol.test.ts
-│   └── messages.test.ts
+│   ├── shared/
+│   │   └── messages.ts                # message types shared by ext + host
+│   └── tests/
+│       ├── protocol.test.ts
+│       └── pi.test.ts
 └── dist/                              # compiled output
     ├── extension/                     # loaded by Chrome
     └── host/                          # native host executable
@@ -67,7 +69,7 @@
 **Files:**
 - Create: `package.json`
 - Create: `tsconfig.json`
-- Create: `tests/.gitkeep`
+- Create: `src/tests/.gitkeep`
 
 **Interfaces:**
 - Produces: npm scripts `build`, `build:watch`, `test`, `install:host`.
@@ -131,7 +133,7 @@ Expected: `node_modules/` and `package-lock.json` created.
 - [ ] **Step 4: Create source directories**
 
 ```bash
-mkdir -p src/extension src/host src/shared scripts tests
+mkdir -p src/extension src/host src/shared src/tests scripts
 ```
 
 - [ ] **Step 5: Commit**
@@ -140,7 +142,7 @@ mkdir -p src/extension src/host src/shared scripts tests
 git add package.json tsconfig.json .gitignore
 # create .gitignore if absent
 printf "node_modules/\ndist/\n.DS_Store\n" > .gitignore
-git add .gitignore src scripts tests
+git add .gitignore src scripts
 git commit -m "chore: scaffold TypeScript project"
 ```
 
@@ -151,7 +153,7 @@ git commit -m "chore: scaffold TypeScript project"
 **Files:**
 - Create: `src/shared/messages.ts`
 - Create: `src/host/protocol.ts`
-- Create: `tests/protocol.test.ts`
+- Create: `src/tests/protocol.test.ts`
 
 **Interfaces:**
 - Produces: `Message` union type, `encodeMessage(msg)`, `decodeMessages(buffer)`.
@@ -159,7 +161,7 @@ git commit -m "chore: scaffold TypeScript project"
 
 - [ ] **Step 1: Write the failing test**
 
-`tests/protocol.test.ts`:
+`src/tests/protocol.test.ts`:
 
 ```ts
 import { describe, it } from 'node:test';
@@ -278,7 +280,7 @@ git commit -m "feat: add shared message types and length-prefixed protocol"
 
 **Files:**
 - Create: `src/host/pi.ts`
-- Create: `tests/pi.test.ts`
+- Create: `src/tests/pi.test.ts`
 - Modify: `src/host/index.ts`
 
 **Interfaces:**
@@ -287,7 +289,7 @@ git commit -m "feat: add shared message types and length-prefixed protocol"
 
 - [ ] **Step 1: Write the failing test**
 
-`tests/pi.test.ts`:
+`src/tests/pi.test.ts`:
 
 ```ts
 import { describe, it } from 'node:test';
@@ -407,11 +409,11 @@ git commit -m "feat: native host Pi CLI wrapper"
 ### Task 4: Install Script for Native Host
 
 **Files:**
-- Create: `scripts/install-host.ts`
+- Create: `src/scripts/install-host.ts`
 - Create: `src/host/manifest.template.json`
 
 **Interfaces:**
-- Produces: `scripts/install-host.ts` writes host manifest to OS-specific location.
+- Produces: `src/scripts/install-host.ts` writes host manifest to OS-specific location.
 - Consumes: compiled host path `dist/host/index.js`.
 
 - [ ] **Step 1: Create host manifest template**
@@ -430,7 +432,7 @@ git commit -m "feat: native host Pi CLI wrapper"
 
 - [ ] **Step 2: Write install script**
 
-`scripts/install-host.ts`:
+`src/scripts/install-host.ts`:
 
 ```ts
 import { writeFileSync, mkdirSync, chmodSync } from 'node:fs';
@@ -491,7 +493,7 @@ Expected: JSON contains `name`, `path`, `allowed_origins` with extension id.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/install-host.ts src/host/manifest.template.json
+git add src/scripts/install-host.ts src/host/manifest.template.json
 git commit -m "feat: native host install script for macOS/linux"
 ```
 
@@ -531,6 +533,13 @@ git commit -m "feat: native host install script for macOS/linux"
     "service_worker": "background.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "side_panel": {
     "default_path": "sidepanel.html"
   },
@@ -598,12 +607,36 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 - [ ] **Step 4: Update build to copy static assets**
 
+Create `src/scripts/copy-assets.ts`:
+
+```ts
+import { cpSync, existsSync } from 'node:fs';
+
+const assets = [
+  'manifest.json',
+  'icons',
+  'sidepanel.html',
+  'sidepanel.css',
+  'settings.html',
+  'settings.css',
+  'onboarding.html',
+  'onboarding.css',
+];
+
+for (const asset of assets) {
+  const src = `src/extension/${asset}`;
+  if (existsSync(src)) {
+    cpSync(src, `dist/extension/${asset}`, { recursive: true, force: true });
+  }
+}
+```
+
 Modify `package.json` scripts:
 
 ```json
 "scripts": {
   "build": "tsc && npm run copy:assets",
-  "copy:assets": "cp -R src/extension/manifest.json src/extension/icons src/extension/*.html src/extension/*.css dist/extension/",
+  "copy:assets": "node dist/scripts/copy-assets.js",
   "build:watch": "tsc --watch",
   "test": "node --test dist/tests/*.test.js",
   "install:host": "node dist/scripts/install-host.js"
@@ -614,7 +647,7 @@ Modify `package.json` scripts:
 
 ```bash
 npm run build
-git add src/extension/manifest.json src/extension/background.ts src/extension/icons package.json tsconfig.json
+git add src/extension/manifest.json src/extension/background.ts src/extension/icons src/scripts/copy-assets.ts package.json tsconfig.json
 git commit -m "feat: extension manifest and background native port manager"
 ```
 
@@ -678,7 +711,9 @@ async function clickTool(args: { selector: string }): Promise<ToolResult> {
 async function screenshotTool(args: { fullPage?: boolean }): Promise<ToolResult> {
   const start = performance.now();
   const dataUrl = await new Promise<string>((resolve) => {
-    chrome.runtime.sendMessage({ type: 'capture_tab', fullPage: !!args.fullPage }, resolve);
+    chrome.runtime.sendMessage({ type: 'capture_tab', fullPage: !!args.fullPage }, (response) => {
+      resolve(response?.screenshot || '');
+    });
   });
   return { result: { screenshot: dataUrl }, elapsedMs: Math.round(performance.now() - start) };
 }
@@ -797,9 +832,9 @@ git commit -m "feat: content script with scroll, click, screenshot tools"
 
 - [ ] **Step 2: Write CSS from design mockup**
 
-`src/extension/sidepanel.css` should mirror the Red Line System styles from `design-mockups/sidepanel.html`. Key selectors: `.header`, `.chat`, `.message`, `.bubble`, `.agent-card`, `.tool-header`, `.tool-body`, `.input-area`, `.send-btn`.
+`src/extension/sidepanel.css` should mirror the Red Line System styles from `design-mockups/sidepanel.html`. Key selectors: `.header`, `.chat`, `.message`, `.bubble`, `.agent-bubble`, `.agent-card`, `.tool-header`, `.tool-body`, `.completion-card`, `.input-area`, `.send-btn`.
 
-Use the exact token values from the Global Constraints.
+Use the exact token values from the Global Constraints. Add an `.agent-bubble` class that applies the red left border instead of using inline styles.
 
 - [ ] **Step 3: Implement sidepanel.ts**
 
@@ -833,7 +868,7 @@ const toolCards = new Map<string, HTMLElement>();
 function appendToolCall(msg: ToolCallMessage) {
   const row = document.createElement('div');
   row.className = 'message agent';
-  row.innerHTML = `<div class="bubble" style="background:var(--bg);border-left:3px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0;">
+  row.innerHTML = `<div class="bubble agent-bubble">
     <div class="agent-card" data-tool-id="${msg.id}">
       <div class="tool-header"><div class="tool-name">${escapeHtml(msg.name)}</div><div class="tool-status">working</div></div>
       <div class="tool-body">${formatArgs(msg.args)}</div>
@@ -898,10 +933,6 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'error') appendAgentText(`Error: ${msg.message}`);
 });
-
-document.getElementById('settingsBtn')?.addEventListener('click', () => {
-  chrome.runtime.openOptionsPage();
-});
 ```
 
 - [ ] **Step 4: Build and verify files copied**
@@ -930,14 +961,14 @@ git commit -m "feat: side panel chat UI"
 - Create: `src/extension/settings.ts`
 
 **Interfaces:**
-- Produces: `chrome.storage.sync` persisted settings object.
+- Produces: `chrome.storage.local` persisted settings object.
 - Consumes: Red Line System styles.
 
 - [ ] **Step 1: Write settings HTML/CSS/TS**
 
 Mirror `design-mockups/settings.html` with Red Line System tokens.
 
-`src/extension/settings.ts` core logic:
+`src/extension/settings.ts`:
 
 ```ts
 interface Settings {
@@ -966,26 +997,83 @@ const DEFAULTS: Settings = {
   piPath: 'pi',
 };
 
+const fields: Record<keyof Settings, string> = {
+  authMode: 'authMode',
+  provider: 'provider',
+  model: 'model',
+  apiKey: 'apiKey',
+  autoScreenshot: 'autoScreenshot',
+  highlightTarget: 'highlightTarget',
+  confirmSensitive: 'confirmSensitive',
+  fullPageScreenshot: 'fullPageScreenshot',
+  nativeHostPath: 'nativeHostPath',
+  piPath: 'piPath',
+};
+
+function getEl<T extends HTMLElement>(id: string): T {
+  return document.getElementById(id) as T;
+}
+
+function applyToForm(settings: Settings) {
+  (getEl<HTMLInputElement>(fields.authMode).value) = settings.authMode;
+  getEl<HTMLInputElement>(fields.provider).value = settings.provider;
+  getEl<HTMLInputElement>(fields.model).value = settings.model;
+  getEl<HTMLInputElement>(fields.apiKey).value = settings.apiKey;
+  getEl<HTMLInputElement>(fields.nativeHostPath).value = settings.nativeHostPath;
+  getEl<HTMLInputElement>(fields.piPath).value = settings.piPath;
+  getEl<HTMLInputElement>(fields.autoScreenshot).checked = settings.autoScreenshot;
+  getEl<HTMLInputElement>(fields.highlightTarget).checked = settings.highlightTarget;
+  getEl<HTMLInputElement>(fields.confirmSensitive).checked = settings.confirmSensitive;
+  getEl<HTMLInputElement>(fields.fullPageScreenshot).checked = settings.fullPageScreenshot;
+}
+
+function readFromForm(): Settings {
+  return {
+    authMode: getEl<HTMLSelectElement>(fields.authMode).value as 'pi' | 'manual',
+    provider: getEl<HTMLInputElement>(fields.provider).value,
+    model: getEl<HTMLInputElement>(fields.model).value,
+    apiKey: getEl<HTMLInputElement>(fields.apiKey).value,
+    autoScreenshot: getEl<HTMLInputElement>(fields.autoScreenshot).checked,
+    highlightTarget: getEl<HTMLInputElement>(fields.highlightTarget).checked,
+    confirmSensitive: getEl<HTMLInputElement>(fields.confirmSensitive).checked,
+    fullPageScreenshot: getEl<HTMLInputElement>(fields.fullPageScreenshot).checked,
+    nativeHostPath: getEl<HTMLInputElement>(fields.nativeHostPath).value,
+    piPath: getEl<HTMLInputElement>(fields.piPath).value,
+  };
+}
+
 async function load() {
-  const stored = await chrome.storage.sync.get(DEFAULTS);
+  const stored = await chrome.storage.local.get(DEFAULTS);
   applyToForm(stored as Settings);
 }
 
 async function save() {
   const settings = readFromForm();
-  await chrome.storage.sync.set(settings);
+  await chrome.storage.local.set(settings);
+  const saveBtn = getEl<HTMLButtonElement>('saveBtn');
+  const original = saveBtn.textContent;
+  saveBtn.textContent = 'Saved';
+  setTimeout(() => (saveBtn.textContent = original), 1200);
 }
 
 document.getElementById('saveBtn')?.addEventListener('click', save);
 load();
 ```
 
-- [ ] **Step 2: Add options_page to manifest**
+- [ ] **Step 2: Add options_page to manifest and wire settings button**
 
 Modify `src/extension/manifest.json`:
 
 ```json
 "options_page": "settings.html"
+```
+
+Then modify `src/extension/sidepanel.ts` to wire the settings button:
+
+```ts
+document.getElementById('settingsBtn')?.addEventListener('click', () => {
+  chrome.runtime.openOptionsPage();
+});
 ```
 
 - [ ] **Step 3: Build and verify**
@@ -1079,7 +1167,7 @@ npm run install:host -- <extension-id>
 
 - [ ] **Step 3: Create mock Pi CLI for testing**
 
-`scripts/mock-pi.ts`:
+`src/scripts/mock-pi.ts`:
 
 ```ts
 import { encodeMessage } from '../host/protocol.js';

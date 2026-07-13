@@ -6,28 +6,36 @@ interface ToolResult {
 function highlight(selector: string) {
   const el = document.querySelector(selector) as HTMLElement | null;
   if (!el) return;
-  const previousOutline = el.style.outline;
+  const computedStyle = window.getComputedStyle(el);
+  const previousOutline = computedStyle.outline;
+  const previousOutlineOffset = computedStyle.outlineOffset;
   el.style.outline = '2px solid #EB0028';
   el.style.outlineOffset = '2px';
   setTimeout(() => {
     el.style.outline = previousOutline;
-    el.style.outlineOffset = '';
+    el.style.outlineOffset = previousOutlineOffset;
   }, 1200);
 }
 
 async function scrollTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { direction, selector } = args as { direction?: string; selector?: string };
   const start = performance.now();
+  let scrolled = false;
   if (selector) {
     const el = document.querySelector(selector);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      scrolled = true;
+    }
   } else if (direction === 'bottom') {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    scrolled = true;
   } else if (direction === 'top') {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrolled = true;
   }
   await new Promise((r) => setTimeout(r, 300));
-  return { result: { scrolled: true }, elapsedMs: Math.round(performance.now() - start) };
+  return { result: { scrolled }, elapsedMs: Math.round(performance.now() - start) };
 }
 
 async function clickTool(args: Record<string, unknown>): Promise<ToolResult> {
