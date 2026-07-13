@@ -1,24 +1,61 @@
-import { PiSession } from './pi.js';
+import { AgentHost } from './agent.js';
+import { encodeMessage, decodeMessages } from './protocol.js';
+import type { Message, ToolCallMessage, ToolResultMessage } from '../shared/messages.js';
 
-const session = new PiSession(process.env.PI_COMMAND || 'pi', ['agent']);
-session.onMessage = (msg) => {
-  const encoded = Buffer.from(JSON.stringify(msg), 'utf8');
-  const header = Buffer.alloc(4);
-  header.writeUInt32LE(encoded.length, 0);
-  process.stdout.write(Buffer.concat([header, encoded]));
-};
+const TOOL_RESULT_TIMEOUT_MS = 60_000;
 
-let buffer: Buffer = Buffer.alloc(0);
-process.stdin.on('data', (chunk: Buffer) => {
-  buffer = Buffer.concat([buffer, chunk]);
-  while (buffer.length >= 4) {
-    const length = buffer.readUInt32LE(0);
-    if (buffer.length < 4 + length) break;
-    const json = buffer.subarray(4, 4 + length).toString('utf8');
-    const msg = JSON.parse(json);
-    if (msg.type === 'user') session.send(msg.text);
-    buffer = buffer.subarray(4 + length);
-  }
+const pendingToolCalls = new Map<
+  string,
+  { resolve: (msg: ToolResultMessage) => void; reject: (err: Error) => void; timeout: NodeJS.Timeout }
+>();
+
+async function main() {
+  const host = new AgentHost(async (toolCall: ToolCallMessage): Promise<ToolResultMessage> => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingToolCalls.delete(toolCall.id);
+        reject(new Error(`Timeout waiting for tool result: ${toolCall.name}`));
+      }, TOOL_RESULT_TIMEOUT_MS);
+      pendingToolCalls.set(toolCall.id, { resolve, reject, timeout });
+      process.stdout.write(encodeMessage(toolCall));
+    });
+  });
+
+  host.onMessage = (msg: Message) => {
+    process.stdout.write(encodeMessage(msg));
+  };
+
+  const tools = host.getCustomTools();
+  const session = await host.createSession(tools);
+  host.bindSession(session);
+
+  let buffer = Buffer.alloc(0) as Buffer;
+  process.stdin.on('data', (chunk: Buffer) => {
+    buffer = Buffer.concat([buffer, chunk]) as unknown as Buffer;
+    const { messages, remainder } = decodeMessages(buffer);
+    buffer = remainder as unknown as Buffer;
+    for (const msg of messages) {
+      if (msg.type === 'user') {
+        host.sendUserMessage(msg.text).catch((err: Error) => {
+          process.stdout.write(encodeMessage({ type: 'error', message: err.message }));
+        });
+      } else if (msg.type === 'tool_result') {
+        const pending = pendingToolCalls.get(msg.id);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pendingToolCalls.delete(msg.id);
+          pending.resolve(msg);
+        }
+      }
+    }
+  });
+
+  process.stdin.on('end', () => {
+    host.dispose();
+  });
+}
+
+main().catch((err: Error) => {
+  process.stdout.write(encodeMessage({ type: 'error', message: err.message }));
+  process.exit(1);
 });
-
-process.stdin.on('end', () => session.close());
