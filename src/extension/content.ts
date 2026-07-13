@@ -60,10 +60,76 @@ async function screenshotTool(args: Record<string, unknown>): Promise<ToolResult
   return { result: { screenshot: dataUrl }, elapsedMs: Math.round(performance.now() - start) };
 }
 
+function getSelector(el: Element): string {
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  const tag = el.tagName.toLowerCase();
+  const classes = Array.from(el.classList)
+    .filter((c) => !c.startsWith('pi-'))
+    .join('.');
+  return classes ? `${tag}.${classes}` : tag;
+}
+
+async function typeTool(args: Record<string, unknown>): Promise<ToolResult> {
+  const { selector, text, submit } = args as { selector: string; text: string; submit?: boolean };
+  const start = performance.now();
+  const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+  if (!el) throw new Error(`Element not found: ${selector}`);
+  el.focus();
+  el.value = text;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  if (submit) {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  }
+  await new Promise((r) => setTimeout(r, 100));
+  return { result: { typed: true }, elapsedMs: Math.round(performance.now() - start) };
+}
+
+async function navigateTool(args: Record<string, unknown>): Promise<ToolResult> {
+  const { url } = args as { url: string };
+  const start = performance.now();
+  window.location.href = url;
+  return { result: { navigated: url }, elapsedMs: Math.round(performance.now() - start) };
+}
+
+async function getTextTool(args: Record<string, unknown>): Promise<ToolResult> {
+  const { selector } = args as { selector?: string };
+  const start = performance.now();
+  if (selector) {
+    const el = document.querySelector(selector);
+    return { result: { text: el?.textContent?.trim() ?? '' }, elapsedMs: Math.round(performance.now() - start) };
+  }
+  return { result: { text: document.body.innerText?.trim() ?? '' }, elapsedMs: Math.round(performance.now() - start) };
+}
+
+async function findElementTool(args: Record<string, unknown>): Promise<ToolResult> {
+  const { selector } = args as { description?: string; selector?: string };
+  const start = performance.now();
+  if (selector) {
+    const el = document.querySelector(selector);
+    return {
+      result: { found: !!el, selector, text: el?.textContent?.trim().slice(0, 200) },
+      elapsedMs: Math.round(performance.now() - start),
+    };
+  }
+  const candidates = Array.from(document.querySelectorAll('button, a, input, textarea, select'))
+    .slice(0, 10)
+    .map((el) => ({
+      tag: el.tagName.toLowerCase(),
+      selector: getSelector(el),
+      text: el.textContent?.trim().slice(0, 80) || (el as HTMLInputElement).value || '',
+    }));
+  return { result: { candidates }, elapsedMs: Math.round(performance.now() - start) };
+}
+
 const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> = {
   browser_scroll: scrollTool,
   browser_click: clickTool,
   browser_screenshot: screenshotTool,
+  browser_type: typeTool,
+  browser_navigate: navigateTool,
+  browser_get_text: getTextTool,
+  browser_find_element: findElementTool,
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
