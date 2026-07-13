@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Example Page — Completed State</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: #f5f5f5;
+      color: #111;
+      min-height: 100vh;
+    }
+
+    .browser-chrome {
+      background: #e9ecef;
+      border-bottom: 1px solid #bbb;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .browser-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .browser-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .browser-dot.red { background: #ff5f57; }
+    .browser-dot.yellow { background: #febc2e; }
+    .browser-dot.green { background: #28c840; }
+
+    .address-bar {
+      flex: 1;
+      background: white;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+
+    .page h1 {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+
+    .page p {
+      color: #555;
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 32px;
+    }
+
+    .item-card {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .item-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .item-card p {
+      margin: 0 0 16px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .item-card button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #111;
+      color: white;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .load-more {
+      display: block;
+      margin: 40px auto 0;
+      padding: 12px 32px;
+      border: 1px solid #111;
+      border-radius: 8px;
+      background: white;
+      color: #111;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .completion-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 2147483646;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .completion-card {
+      background: white;
+      border: 1px solid #dadce0;
+      border-left: 3px solid #eb0028;
+      border-radius: 0 8px 8px 0;
+      padding: 16px;
+      width: 320px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      pointer-events: auto;
+    }
+
+    .completion-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .completion-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #eb0028;
+    }
+
+    .completion-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #202124;
+    }
+
+    .completion-summary {
+      color: #5f6368;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .completion-meta {
+      display: flex;
+      gap: 16px;
+      font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+      font-size: 11px;
+      color: #9aa0a6;
+    }
+
+    .completion-meta span {
+      color: #202124;
+      font-weight: 600;
+    }
+
+    .agent-toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: white;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #202124;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 2147483647;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    }
+
+    .agent-toast-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: #f8f9fa;
+      border: 1px solid #dadce0;
+      color: #202124;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    .agent-toast-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .agent-toast-title {
+      font-weight: 600;
+    }
+
+    .agent-toast-sub {
+      color: #5f6368;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="browser-chrome">
+    <div class="browser-dots">
+      <div class="browser-dot red"></div>
+      <div class="browser-dot yellow"></div>
+      <div class="browser-dot green"></div>
+    </div>
+    <div class="address-bar">example-shop.com/products</div>
+  </div>
+
+  <div class="page">
+    <h1>Product Listings</h1>
+    <p>More products loaded after agent interaction.</p>
+
+    <div class="items-grid">
+      <div class="item-card">
+        <h3>Wireless Headphones</h3>
+        <p>Premium noise cancelling.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>Mechanical Keyboard</h3>
+        <p>Compact 75% layout.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>USB-C Hub</h3>
+        <p>7-in-1 adapter.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>Webcam 4K</h3>
+        <p>Studio quality.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>Desk Lamp</h3>
+        <p>Adjustable LED.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>Monitor Arm</h3>
+        <p>Gas spring arm.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>Laptop Stand</h3>
+        <p>Aluminum ergonomic.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>Webcam Ring Light</h3>
+        <p>10" dimmable LED.</p>
+        <button>Add to cart</button>
+      </div>
+      <div class="item-card">
+        <h3>USB Microphone</h3>
+        <p>Cardioid condenser.</p>
+        <button>Add to cart</button>
+      </div>
+    </div>
+
+    <button class="load-more">Load more</button>
+  </div>
+
+  <div class="completion-overlay">
+    <div class="completion-card">
+      <div class="completion-header">
+        <div class="completion-dot"></div>
+        <div class="completion-title">Task completed</div>
+      </div>
+      <div class="completion-summary">
+        Scrolled to the bottom and clicked "Load more". 6 more products are now visible.
+      </div>
+      <div class="completion-meta">
+        <div>tools: <span>3</span></div>
+        <div>time: <span>254ms</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="agent-toast">
+    <div class="agent-toast-icon">π</div>
+    <div class="agent-toast-text">
+      <span class="agent-toast-title">Done</span>
+      <span class="agent-toast-sub">3 tools · 254ms</span>
+    </div>
+  </div>
+</body>
+</html>

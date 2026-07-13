@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pi Browser Agent — Design Mockups</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --surface: #f8f9fa;
+      --border: #dadce0;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --text-muted: #9aa0a6;
+      --accent: #eb0028;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 60px 24px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 6px;
+    }
+    .subtitle {
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      font-size: 14px;
+    }
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text);
+      margin: 28px 0 12px;
+      font-weight: 700;
+    }
+    .mockups {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    a.mockup {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-decoration: none;
+      color: var(--text);
+      transition: all 0.1s;
+    }
+    a.mockup:hover {
+      border-color: var(--accent);
+      background: var(--bg);
+    }
+    .mockup-icon {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+    .mockup-info {
+      flex: 1;
+    }
+    .mockup-title {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 3px;
+    }
+    .mockup-desc {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .mockup-arrow {
+      color: var(--text-secondary);
+      font-size: 16px;
+    }
+    .note {
+      margin-top: 24px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Pi Browser Agent — Design Mockups</h1>
+    <div class="subtitle">OnePlus-inspired: black/white with red accent, Chrome-rounded corners.</div>
+
+    <div class="section-title">In Context</div>
+    <div class="mockups">
+      <a class="mockup" href="context-chat.html">
+        <div class="mockup-icon">π</div>
+        <div class="mockup-info">
+          <div class="mockup-title">Chat Side Panel</div>
+          <div class="mockup-desc">Extension panel open next to a browser page.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+
+      <a class="mockup" href="context-settings.html">
+        <div class="mockup-icon">⚙</div>
+        <div class="mockup-info">
+          <div class="mockup-title">Settings Side Panel</div>
+          <div class="mockup-desc">Settings shown as a 380px browser side panel.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+
+      <a class="mockup" href="context-completed.html">
+        <div class="mockup-icon">✓</div>
+        <div class="mockup-info">
+          <div class="mockup-title">Completion Report</div>
+          <div class="mockup-desc">Side panel report after the agent finishes a task.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+
+      <a class="mockup" href="browser-page.html">
+        <div class="mockup-icon">◎</div>
+        <div class="mockup-info">
+          <div class="mockup-title">Browser Overlay — Working</div>
+          <div class="mockup-desc">How the page looks while the agent is acting on an element.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+
+      <a class="mockup" href="browser-page-completed.html">
+        <div class="mockup-icon">✓</div>
+        <div class="mockup-info">
+          <div class="mockup-title">Browser Overlay — Completed</div>
+          <div class="mockup-desc">Summary report shown after the task is finished.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+    </div>
+
+    <div class="section-title">Standalone Components</div>
+    <div class="mockups">
+      <a class="mockup" href="sidepanel.html">
+        <div class="mockup-icon">◧</div>
+        <div class="mockup-info">
+          <div class="mockup-title">sidepanel.html</div>
+          <div class="mockup-desc">The actual extension panel HTML.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+
+      <a class="mockup" href="settings.html">
+        <div class="mockup-icon">#</div>
+        <div class="mockup-info">
+          <div class="mockup-title">settings.html</div>
+          <div class="mockup-desc">The actual settings panel HTML.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+
+      <a class="mockup" href="onboarding.html">
+        <div class="mockup-icon">$</div>
+        <div class="mockup-info">
+          <div class="mockup-title">onboarding.html</div>
+          <div class="mockup-desc">One-time install/setup page.</div>
+        </div>
+        <div class="mockup-arrow">→</div>
+      </a>
+    </div>
+
+    <div class="note">
+      The extension side panel is fixed at 380px wide in Chrome. The "Context" mockups show it embedded next to a fake browser page so you can judge real proportions. Accent color is OnePlus Red #EB0028.
+    </div>
+  </div>
+</body>
+</html>
