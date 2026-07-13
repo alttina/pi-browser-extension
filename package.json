@@ -8,11 +8,13 @@
     "copy:assets": "node dist/scripts/copy-assets.js",
     "build:watch": "tsc --watch",
     "test": "node --test dist/tests/*.test.js",
+    "test:e2e": "npm run build && node dist/e2e/extension.e2e.js",
     "install:host": "node dist/scripts/install-host.js"
   },
   "devDependencies": {
     "@types/chrome": "^0.2.2",
     "@types/node": "^26.1.1",
+    "puppeteer-core": "^25.3.0",
     "typescript": "^5.5.0"
   }
 }

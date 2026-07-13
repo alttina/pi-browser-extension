@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Pi Browser Agent",
   "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtJxxJSoV8hCb0tOtYQ1/tYtCp2SK94uBYLCdrJzVLsn2VVrCcvNY9qLNnIXRMd1GzWfsyN/RtQsbu411/N8rjYOMcM+3qI3SXHqytHmbf+L85Gm8ruAo6zk5TajVbGZ9qMnfT70VGR1xvo7ymKnv1wniAwoVv0aMievg48aMWi2p0Ya60LyyvsFbvPP2nLAVo1vpbymx9OZji5zDuTeLyy7OP42BnPqUVwkAMBccyCnBGw5LekIpjz8uQk8n+kYuToHNhVHFctbVIK35FCKjdvhEawxAlcORu+njRWNtZJLYdkjAsJ/D20nutjTorn72+uVQlByTnwh9YdVr1XT6IwIDAQAB",
   "description": "Control your browser with natural language through Pi.",
   "permissions": [
     "sidePanel",
