@@ -3,6 +3,11 @@ export interface UserMessage {
   text: string;
 }
 
+export interface AssistantMessage {
+  type: 'assistant';
+  text: string;
+}
+
 export interface ToolCallMessage {
   type: 'tool_call';
   id: string;
@@ -31,6 +36,7 @@ export interface ErrorMessage {
 
 export type Message =
   | UserMessage
+  | AssistantMessage
   | ToolCallMessage
   | ToolResultMessage
   | DoneMessage
