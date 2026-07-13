@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pi Browser Agent — Install</title>
+  <link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <div class="brand-icon">π</div>
+      <h1>Pi Browser Agent</h1>
+      <p>Control your browser with natural language through Pi.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step done">
+        <div class="step-header">
+          <div class="step-number">✓</div>
+          <div class="step-title">Install Pi CLI</div>
+          <div class="step-status">ready</div>
+        </div>
+        <div class="step-body">
+          Pi Browser Agent needs the Pi coding agent installed locally.
+          <div class="code-block">
+            <span>npm install -g @earendil-works/pi-coding-agent</span>
+            <button class="copy-btn">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-header">
+          <div class="step-number">2</div>
+          <div class="step-title">Install Native Host</div>
+          <div class="step-status">required</div>
+        </div>
+        <div class="step-body">
+          The native host bridges the browser extension and Pi.
+          <div class="code-block">
+            <span>curl -fsSL https://pi-browser-agent.dev/install.sh | bash</span>
+            <button class="copy-btn">Copy</button>
+          </div>
+          <button class="btn" id="runInstaller">Run installer</button>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-header">
+          <div class="step-number">3</div>
+          <div class="step-title">Configure your LLM</div>
+          <div class="step-status">required</div>
+        </div>
+        <div class="step-body">
+          Either log in through Pi or enter your API key in the extension settings.
+          <div class="code-block">
+            <span>pi /login</span>
+            <button class="copy-btn">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-header">
+          <div class="step-number">4</div>
+          <div class="step-title">Pin the extension</div>
+          <div class="step-status">required</div>
+        </div>
+        <div class="step-body">
+          Click the extensions icon in Chrome and pin Pi Browser Agent to your toolbar. Then open any page and click the icon to start.
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      SECURITY: This extension can read page content and execute browser actions. Enable "Confirm sensitive actions" in settings to review every tool call.
+    </div>
+
+    <div class="footer">
+      Need help? Read the docs or open an issue on GitHub.
+    </div>
+  </div>
+
+  <script type="module" src="onboarding.js"></script>
+</body>
+</html>
