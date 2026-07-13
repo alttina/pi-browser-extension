@@ -19,6 +19,12 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === 'capture_tab') {
+    chrome.tabs.captureVisibleTab({ format: 'png' }).then((dataUrl) => {
+      sendResponse({ screenshot: dataUrl });
+    });
+    return true;
+  }
   if (msg.type === 'user' && port) {
     port.postMessage(msg);
     sendResponse({ ok: true });
