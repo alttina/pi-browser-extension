@@ -90,3 +90,7 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'error') appendAgentText(`Error: ${msg.message}`);
 });
+
+document.getElementById('settingsBtn')?.addEventListener('click', () => {
+  chrome.runtime.openOptionsPage();
+});

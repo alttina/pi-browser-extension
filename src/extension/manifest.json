@@ -27,6 +27,7 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "options_page": "settings.html",
   "action": {
     "default_title": "Open Pi Browser Agent"
   },
