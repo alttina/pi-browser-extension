@@ -1,0 +1,15 @@
+{
+  "name": "pi-browser-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "node --test dist/tests/*.test.js",
+    "install:host": "node dist/scripts/install-host.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
