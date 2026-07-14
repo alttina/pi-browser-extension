@@ -21,6 +21,7 @@ function appendAgentText(text: string) {
 }
 
 const toolCards = new Map<string, HTMLElement>();
+const toolHistory: { id: string; name: string; status: 'working' | 'done'; elapsedMs?: number }[] = [];
 
 function appendToolCall(msg: ToolCallMessage) {
   const row = document.createElement('div');
@@ -33,6 +34,7 @@ function appendToolCall(msg: ToolCallMessage) {
   </div>`;
   chat.appendChild(row);
   toolCards.set(msg.id, row.querySelector('.agent-card') as HTMLElement);
+  toolHistory.push({ id: msg.id, name: msg.name, status: 'working' });
   chat.scrollTop = chat.scrollHeight;
 }
 
@@ -41,17 +43,75 @@ function updateToolResult(msg: ToolResultMessage) {
   if (!card) return;
   const status = card.querySelector('.tool-status') as HTMLElement;
   status.textContent = `done ${msg.elapsedMs}ms`;
+  const entry = toolHistory.find((t) => t.id === msg.id);
+  if (entry) {
+    entry.status = 'done';
+    entry.elapsedMs = msg.elapsedMs;
+  }
 }
 
 function appendDone(msg: DoneMessage) {
   const row = document.createElement('div');
   row.className = 'message agent';
-  row.innerHTML = `<div class="completion-card">
-    <div class="completion-summary">${escapeHtml(msg.summary)}</div>
-    <div class="completion-meta"><div>tools: <span>${msg.toolCount}</span></div><div>time: <span>${msg.totalMs}ms</span></div></div>
-  </div>`;
+  const trajectory = toolHistory.map((t) => escapeHtml(t.name)).join(' → ');
+  const detailsId = `completion-details-${Date.now()}`;
+  row.innerHTML = `
+    <div class="completion-card">
+      <div class="completion-header">
+        <div class="completion-badge">Done</div>
+        <div class="completion-meta-inline">${msg.toolCount} tools · ${msg.totalMs}ms</div>
+      </div>
+      <div class="completion-summary">${escapeHtml(msg.summary)}</div>
+      <div class="completion-tools">
+        <button class="completion-toggle" aria-expanded="false" aria-controls="${detailsId}">
+          Show tool trajectory
+        </button>
+        <div id="${detailsId}" class="completion-details hidden">
+          <div class="completion-trajectory">${trajectory || 'No tools used'}</div>
+          <ul class="completion-tool-list">
+            ${toolHistory.map((t) => `
+              <li>
+                <span class="tool-name-small">${escapeHtml(t.name)}</span>
+                <span class="tool-status-small">${t.status === 'done' && t.elapsedMs !== undefined ? `${t.elapsedMs}ms` : t.status}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      </div>
+      <div class="completion-actions">
+        <button class="completion-action-btn copy-summary-btn">Copy summary</button>
+        <button class="completion-action-btn new-task-btn">New task</button>
+      </div>
+    </div>
+  `;
   chat.appendChild(row);
+
+  const toggle = row.querySelector('.completion-toggle') as HTMLButtonElement;
+  const details = row.querySelector(`#${detailsId}`) as HTMLDivElement;
+  toggle.addEventListener('click', () => {
+    const expanded = details.classList.toggle('hidden');
+    toggle.textContent = expanded ? 'Show tool trajectory' : 'Hide tool trajectory';
+    toggle.setAttribute('aria-expanded', String(!expanded));
+  });
+
+  const copyBtn = row.querySelector('.copy-summary-btn') as HTMLButtonElement;
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(msg.summary).then(() => {
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => (copyBtn.textContent = 'Copy summary'), 1200);
+    });
+  });
+
+  const newTaskBtn = row.querySelector('.new-task-btn') as HTMLButtonElement;
+  newTaskBtn.addEventListener('click', () => {
+    input.value = '';
+    input.focus();
+    input.scrollIntoView({ behavior: 'smooth' });
+  });
+
   chat.scrollTop = chat.scrollHeight;
+  toolHistory.length = 0;
+  toolCards.clear();
 }
 
 function escapeHtml(s: string) {
@@ -73,6 +133,8 @@ function send() {
   if (!text) return;
   appendUser(text);
   input.value = '';
+  toolHistory.length = 0;
+  toolCards.clear();
   chrome.runtime.sendMessage({ type: 'user', text });
 }
 
