@@ -1,4 +1,4 @@
-import { cpSync, existsSync } from 'node:fs';
+import { cpSync, existsSync, copyFileSync, mkdirSync, readdirSync } from 'node:fs';
 
 const assets = [
   'manifest.json',
@@ -17,3 +17,15 @@ for (const asset of assets) {
     cpSync(src, `dist/extension/${asset}`, { recursive: true, force: true });
   }
 }
+
+function copyDir(src: string, dst: string) {
+  mkdirSync(dst, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const s = `${src}/${entry.name}`;
+    const d = `${dst}/${entry.name}`;
+    if (entry.isDirectory()) copyDir(s, d);
+    else copyFileSync(s, d);
+  }
+}
+
+copyDir('src/e2e/fixtures/onestopshop', 'dist/e2e/fixtures/onestopshop');

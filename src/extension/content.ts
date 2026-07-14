@@ -3,17 +3,109 @@ interface ToolResult {
   elapsedMs: number;
 }
 
-function highlight(selector: string) {
-  const el = document.querySelector(selector) as HTMLElement | null;
-  if (!el) return;
-  const computedStyle = window.getComputedStyle(el);
+function escapeAttr(value: string): string {
+  return value.replace(/"/g, '\\"');
+}
+
+function getSelector(el: Element): string {
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  const productId = el.getAttribute('data-product-id') || el.closest('[data-product-id]')?.getAttribute('data-product-id');
+  if (productId) {
+    const tag = el.tagName.toLowerCase();
+    return `[data-product-id="${escapeAttr(productId)}"] ${tag}`;
+  }
+  const tag = el.tagName.toLowerCase();
+  const classes = Array.from(el.classList)
+    .filter((c) => !c.startsWith('pi-'))
+    .join('.');
+  return classes ? `${tag}.${classes}` : tag;
+}
+
+function elementText(el: Element): string {
+  return (
+    el.textContent?.trim() ||
+    (el as HTMLInputElement).placeholder?.trim() ||
+    (el as HTMLInputElement).value?.trim() ||
+    el.getAttribute('aria-label')?.trim() ||
+    ''
+  );
+}
+
+function containsText(el: Element, query: string): boolean {
+  return elementText(el).toLowerCase().includes(query.toLowerCase());
+}
+
+function findElementsByText(query: string, tagHint?: string): Element[] {
+  const selector = tagHint ? tagHint : 'button, a, input, textarea, select, [role="button"], [role="link"]';
+  const candidates = Array.from(document.querySelectorAll(selector));
+  const direct = candidates.filter((el) => containsText(el, query));
+  if (direct.length > 0) return direct;
+  // Also search within ancestor containers for interactive children.
+  const containers = Array.from(document.querySelectorAll('div, article, section, li'));
+  return containers
+    .filter((el) => elementText(el).toLowerCase().includes(query.toLowerCase()))
+    .flatMap((el) => Array.from(el.querySelectorAll('button, a, [role="button"], input, select, textarea')))
+    .slice(0, 5);
+}
+
+function parseContainsClauses(selector: string): string[] {
+  const matches: string[] = [];
+  const regex = /:contains\((['"])(.*?)\1\)/g;
+  let m;
+  while ((m = regex.exec(selector)) !== null) {
+    matches.push(m[2]);
+  }
+  return matches;
+}
+
+function resolveElement(selector: string, roleHint?: string): HTMLElement | null {
+  try {
+    const el = document.querySelector(selector) as HTMLElement | null;
+    if (el) return el;
+  } catch {
+    // Invalid selector; fall through to text search.
+  }
+  const containsClauses = parseContainsClauses(selector);
+  if (containsClauses.length > 0) {
+    // The last :contains clause usually describes the target element.
+    const targetText = containsClauses[containsClauses.length - 1];
+    const contextTexts = containsClauses.slice(0, -1);
+
+    // Determine a target tag hint from the substring just before the last :contains.
+    const lastIndex = selector.lastIndexOf(`:contains(`);
+    const beforeLast = selector.slice(0, lastIndex).trim();
+    const tagMatch = beforeLast.match(/([a-z*]+)$/i);
+    const tagHint = tagMatch && tagMatch[1] !== '*' ? tagMatch[1] : (roleHint || undefined);
+
+    let matches = findElementsByText(targetText, tagHint);
+    if (matches.length === 0) {
+      matches = findElementsByText(targetText);
+    }
+    if (contextTexts.length > 0) {
+      matches = matches.filter((el) =>
+        contextTexts.every((ctx) =>
+          el.closest('div, article, section, li, .product-card')?.textContent?.toLowerCase().includes(ctx.toLowerCase())
+        )
+      );
+    }
+    if (matches.length > 0) return matches[0] as HTMLElement;
+  }
+  // Treat the whole string as a natural-language description.
+  const matches = findElementsByText(selector);
+  if (matches.length > 0) return matches[0] as HTMLElement;
+  return null;
+}
+
+function highlight(el: Element) {
+  const htmlEl = el as HTMLElement;
+  const computedStyle = window.getComputedStyle(htmlEl);
   const previousOutline = computedStyle.outline;
   const previousOutlineOffset = computedStyle.outlineOffset;
-  el.style.outline = '2px solid #EB0028';
-  el.style.outlineOffset = '2px';
+  htmlEl.style.outline = '2px solid #EB0028';
+  htmlEl.style.outlineOffset = '2px';
   setTimeout(() => {
-    el.style.outline = previousOutline;
-    el.style.outlineOffset = previousOutlineOffset;
+    htmlEl.style.outline = previousOutline;
+    htmlEl.style.outlineOffset = previousOutlineOffset;
   }, 1200);
 }
 
@@ -22,7 +114,7 @@ async function scrollTool(args: Record<string, unknown>): Promise<ToolResult> {
   const start = performance.now();
   let scrolled = false;
   if (selector) {
-    const el = document.querySelector(selector);
+    const el = resolveElement(selector);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       scrolled = true;
@@ -41,12 +133,13 @@ async function scrollTool(args: Record<string, unknown>): Promise<ToolResult> {
 async function clickTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { selector } = args as { selector: string };
   const start = performance.now();
-  const el = document.querySelector(selector) as HTMLElement | null;
+  const el = resolveElement(selector, 'button');
   if (!el) throw new Error(`Element not found: ${selector}`);
-  highlight(selector);
+  highlight(el);
   await new Promise((r) => setTimeout(r, 200));
+  const disabled = (el as HTMLButtonElement).disabled ?? false;
   el.click();
-  return { result: { clicked: true }, elapsedMs: Math.round(performance.now() - start) };
+  return { result: { clicked: true, disabled }, elapsedMs: Math.round(performance.now() - start) };
 }
 
 async function screenshotTool(args: Record<string, unknown>): Promise<ToolResult> {
@@ -60,19 +153,10 @@ async function screenshotTool(args: Record<string, unknown>): Promise<ToolResult
   return { result: { screenshot: dataUrl }, elapsedMs: Math.round(performance.now() - start) };
 }
 
-function getSelector(el: Element): string {
-  if (el.id) return `#${CSS.escape(el.id)}`;
-  const tag = el.tagName.toLowerCase();
-  const classes = Array.from(el.classList)
-    .filter((c) => !c.startsWith('pi-'))
-    .join('.');
-  return classes ? `${tag}.${classes}` : tag;
-}
-
 async function typeTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { selector, text, submit } = args as { selector: string; text: string; submit?: boolean };
   const start = performance.now();
-  const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+  const el = resolveElement(selector) as HTMLInputElement | HTMLTextAreaElement | null;
   if (!el) throw new Error(`Element not found: ${selector}`);
   el.focus();
   el.value = text;
@@ -96,30 +180,54 @@ async function getTextTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { selector } = args as { selector?: string };
   const start = performance.now();
   if (selector) {
-    const el = document.querySelector(selector);
+    const el = resolveElement(selector);
     return { result: { text: el?.textContent?.trim() ?? '' }, elapsedMs: Math.round(performance.now() - start) };
   }
   return { result: { text: document.body.innerText?.trim() ?? '' }, elapsedMs: Math.round(performance.now() - start) };
 }
 
 async function findElementTool(args: Record<string, unknown>): Promise<ToolResult> {
-  const { selector } = args as { description?: string; selector?: string };
+  const { description, selector } = args as { description?: string; selector?: string };
   const start = performance.now();
-  if (selector) {
-    const el = document.querySelector(selector);
+  if (selector && !description) {
+    const el = resolveElement(selector);
     return {
       result: { found: !!el, selector, text: el?.textContent?.trim().slice(0, 200) },
       elapsedMs: Math.round(performance.now() - start),
     };
+  }
+  const query = (description || selector || '').trim();
+  if (query) {
+    const matches = findElementsByText(query);
+    if (matches.length === 1) {
+      const el = matches[0];
+      return {
+        result: { found: true, selector: getSelector(el), text: elementText(el) },
+        elapsedMs: Math.round(performance.now() - start),
+      };
+    }
+    if (matches.length > 1) {
+      return {
+        result: {
+          found: true,
+          multiple: true,
+          candidates: matches.slice(0, 5).map((el) => ({
+            selector: getSelector(el),
+            text: elementText(el),
+          })),
+        },
+        elapsedMs: Math.round(performance.now() - start),
+      };
+    }
   }
   const candidates = Array.from(document.querySelectorAll('button, a, input, textarea, select'))
     .slice(0, 10)
     .map((el) => ({
       tag: el.tagName.toLowerCase(),
       selector: getSelector(el),
-      text: el.textContent?.trim().slice(0, 80) || (el as HTMLInputElement).value || '',
+      text: elementText(el),
     }));
-  return { result: { candidates }, elapsedMs: Math.round(performance.now() - start) };
+  return { result: { found: false, candidates }, elapsedMs: Math.round(performance.now() - start) };
 }
 
 const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolResult>> = {
@@ -144,7 +252,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ type: 'tool_result', id: msg.id, result, elapsedMs });
       })
       .catch((err) => {
-        sendResponse({ type: 'error', message: err.message });
+        sendResponse({ type: 'tool_result', id: msg.id, result: { error: err.message }, elapsedMs: 0 });
       });
     return true;
   }

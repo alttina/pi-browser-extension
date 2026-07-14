@@ -76,9 +76,28 @@ function renderProducts() {
       <h3>${p.name}</h3>
       <div class="price">$${p.price.toFixed(2)}</div>
       <div class="stock">${p.stock > 0 ? 'In stock' : 'Out of stock'}</div>
-      <a href="#/product/${p.id}" class="btn">View details</a>
+      <div class="product-actions">
+        <a href="#/product/${p.id}" class="btn">View details</a>
+        <button id="add-to-cart-${p.id}" class="btn btn-primary add-to-cart-btn" data-product-id="${p.id}" ${p.stock === 0 ? 'disabled' : ''}>
+          ${p.stock > 0 ? 'Add to cart' : 'Out of stock'}
+        </button>
+      </div>
     </div>
   `).join('');
+
+  grid.querySelectorAll('.add-to-cart-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const productId = btn.getAttribute('data-product-id');
+      const product = PRODUCTS.find((p) => p.id === productId);
+      if (!product || product.stock === 0) return;
+      const cart = loadCart();
+      const existing = cart.find((item) => item.productId === product.id);
+      if (existing) existing.quantity += 1;
+      else cart.push({ productId: product.id, quantity: 1 });
+      saveCart(cart);
+      showToast(`${product.name} added to cart`);
+    });
+  });
 }
 
 function renderProductDetail(productId) {
@@ -223,6 +242,14 @@ window.__resetFixtureState = function () {
   localStorage.removeItem(CART_KEY);
   localStorage.removeItem(ORDERS_KEY);
   updateCartCount();
+
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.value = '';
+  const categoryFilter = document.getElementById('category-filter');
+  if (categoryFilter) categoryFilter.value = '';
+  const sortOrder = document.getElementById('sort-order');
+  if (sortOrder) sortOrder.value = 'default';
+
   if (window.location.hash.startsWith('#/cart') || window.location.hash.startsWith('#/checkout') || window.location.hash.startsWith('#/order')) {
     window.location.hash = '#/';
   } else {

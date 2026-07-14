@@ -19,7 +19,7 @@ export function setupHost(profileDir: string): HostSetup {
 
   const wrapperPath = join(projectRoot, 'dist/e2e/host-wrapper.sh');
 
-  const wrapper = `#!/bin/bash\nexec node ${hostIndex}\n`;
+  const wrapper = `#!/bin/bash\ncd ${projectRoot}\nexec node ${hostIndex}\n`;
 
   mkdirSync(resolve('dist/e2e'), { recursive: true });
   writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
