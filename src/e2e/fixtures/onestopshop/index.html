@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OneStopShop</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="#/" class="logo">OneStopShop</a>
+    <nav>
+      <a href="#/products">Products</a>
+      <a href="#/cart">Cart (<span id="cart-count">0</span>)</a>
+    </nav>
+  </header>
+
+  <main id="app">
+    <section id="home-view" class="view">
+      <h1>Welcome to OneStopShop</h1>
+      <p>Quality electronics for your workspace.</p>
+      <a href="#/products" class="btn">Browse products</a>
+    </section>
+
+    <section id="products-view" class="view hidden">
+      <div class="toolbar">
+        <input type="search" id="search-input" placeholder="Search products...">
+        <select id="category-filter">
+          <option value="">All categories</option>
+          <option value="audio">Audio</option>
+          <option value="office">Office</option>
+          <option value="accessories">Accessories</option>
+        </select>
+        <select id="sort-order">
+          <option value="default">Sort by</option>
+          <option value="price-asc">Price: low to high</option>
+          <option value="price-desc">Price: high to low</option>
+        </select>
+      </div>
+      <div id="product-grid" class="product-grid"></div>
+    </section>
+
+    <section id="product-view" class="view hidden">
+      <div id="product-detail"></div>
+    </section>
+
+    <section id="cart-view" class="view hidden">
+      <h1>Shopping Cart</h1>
+      <div id="cart-items"></div>
+      <div id="cart-empty" class="hidden">Your cart is empty.</div>
+      <div class="cart-actions">
+        <a href="#/products" class="btn btn-secondary">Continue shopping</a>
+        <button id="checkout-btn" class="btn btn-primary">Proceed to checkout</button>
+      </div>
+    </section>
+
+    <section id="checkout-view" class="view hidden">
+      <h1>Checkout</h1>
+      <form id="checkout-form">
+        <div class="form-group">
+          <label for="full-name">Full name</label>
+          <input type="text" id="full-name" required>
+        </div>
+        <div class="form-group">
+          <label for="address">Shipping address</label>
+          <input type="text" id="address" required>
+        </div>
+        <div class="form-group">
+          <label for="card">Card number</label>
+          <input type="text" id="card" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Place order</button>
+      </form>
+    </section>
+
+    <section id="order-view" class="view hidden">
+      <h1>Order Confirmation</h1>
+      <div id="order-detail"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
