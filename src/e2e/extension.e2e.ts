@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import { findChromium } from './find-chromium.js';
-import { setupMockHost, EXTENSION_ID } from './setup-host.js';
+import { setupHost, EXTENSION_ID } from './setup-host.js';
 
 const EXTENSION_PATH = resolve('dist/extension');
 const TEST_HTML = '<!DOCTYPE html><html><head><title>Pi Agent E2E</title></head><body><h1>Pi Agent E2E</h1><button id="load-more">Load more</button></body></html>';
@@ -43,7 +43,7 @@ async function run() {
   console.log(`Test server: ${testUrl}`);
 
   const profileDir = mkdtempSync(join(tmpdir(), 'pi-browser-agent-e2e-'));
-  const hostSetup = setupMockHost(profileDir);
+  const hostSetup = setupHost(profileDir);
   console.log(`Profile: ${profileDir}`);
 
   let browser: Browser | null = null;
@@ -71,11 +71,14 @@ async function run() {
 
     // Content script test
     const page = await browser.newPage();
+    page.on('console', (c: any) => console.log('[content console]', c.text()));
+    page.on('pageerror', (err: any) => console.log('[content error]', err.message));
     await page.goto(testUrl);
     await new Promise((r) => setTimeout(r, 2000));
 
     const worker = await swTarget.worker();
     assert(worker, 'service worker has execution context');
+
     const contentResult = await worker.evaluate(async (expectedUrl: string) => {
       const tabs = await new Promise<chrome.tabs.Tab[]>((resolve) => chrome.tabs.query({}, resolve));
       const tab = tabs.find((t) => t.url === expectedUrl || t.url?.startsWith(expectedUrl));
@@ -94,38 +97,7 @@ async function run() {
     assert(contentResult.ok, `content script responded: ${contentResult.reason}`);
     console.log('Content script OK:', JSON.stringify(contentResult.response));
 
-    // Native messaging end-to-end (background channel)
-    const nativeResult = await worker.evaluate(async () => {
-      const received: unknown[] = [];
-      const port = chrome.runtime.connectNative('com.pi.browser_agent');
-      port.onMessage.addListener((msg) => received.push(msg));
-      let disconnectError: string | null = null;
-      port.onDisconnect.addListener(() => {
-        if (chrome.runtime.lastError) disconnectError = chrome.runtime.lastError.message ?? 'unknown disconnect';
-      });
-      await new Promise((r) => setTimeout(r, 500));
-      port.postMessage({ type: 'user', text: 'click the load-more button' });
-      for (let i = 0; i < 50; i++) {
-        if (received.some((m: any) => m.type === 'done')) break;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      port.disconnect();
-      const types = (received as any[]).map((m) => m.type);
-      return {
-        disconnectError,
-        types,
-        hasToolCall: types.includes('tool_call'),
-        hasToolResult: types.includes('tool_result'),
-        hasDone: types.includes('done'),
-      };
-    });
-    assert(!nativeResult.disconnectError, `native port disconnected: ${nativeResult.disconnectError}`);
-    assert(nativeResult.hasToolCall, 'received tool_call from native host');
-    assert(nativeResult.hasToolResult, 'received tool_result from native host');
-    assert(nativeResult.hasDone, 'received done from native host');
-    console.log('Native messaging OK:', JSON.stringify(nativeResult.types));
-
-    // Manual UI flow: open side panel page, type, send, and observe results
+    // UI flow + native messaging end-to-end (single host via service-worker bridge)
     const sidePanelPage = await browser.newPage();
     await sidePanelPage.goto(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
     await new Promise((r) => setTimeout(r, 500));
@@ -135,18 +107,51 @@ async function run() {
     assert(hasSend, 'side panel has #sendBtn');
     console.log('Side panel UI opened');
 
-    // Bridge native host responses into runtime messages so the side panel UI renders them
-    await worker.evaluate(async () => {
+    await worker.evaluate(async (expectedUrl: string) => {
+      const tabs = await new Promise<chrome.tabs.Tab[]>((resolve) => chrome.tabs.query({}, resolve));
+      const targetTab = tabs.find((t) => t.url === expectedUrl || t.url?.startsWith(expectedUrl));
+      (self as any).__piTabId = targetTab?.id;
+      (self as any).__piReceived = [];
       const port = chrome.runtime.connectNative('com.pi.browser_agent');
-      port.onMessage.addListener((msg: any) => chrome.runtime.sendMessage(msg).catch(() => {}));
-      chrome.runtime.onMessage.addListener((msg: any) => {
-        if (msg.type === 'user') port.postMessage(msg);
+      function forwardToTab(msg: any) {
+        const tabId = (self as any).__piTabId;
+        if (tabId) {
+          chrome.tabs.sendMessage(tabId, msg, (res: any) => {
+            if (res) port.postMessage(res);
+          });
+        }
+      }
+      port.onMessage.addListener((msg: any) => {
+        (self as any).__piReceived.push(msg);
+        if (msg.type === 'tool_call' && !msg.ui) {
+          forwardToTab(msg);
+        } else {
+          chrome.runtime.sendMessage(msg).catch(() => {});
+        }
       });
-    });
+      chrome.runtime.onMessage.addListener((msg: any) => {
+        if (msg.type === 'user' || msg.type === 'tool_result') port.postMessage(msg);
+      });
+    }, testUrl);
 
     await sidePanelPage.type('#input', 'click the load-more button');
     await sidePanelPage.click('#sendBtn');
-    await new Promise((r) => setTimeout(r, 2500));
+
+    // Wait for the side panel to render the completion card (up to 20s).
+    let nativeResult: { types: string[]; last: unknown[] } | null = null;
+    for (let i = 0; i < 200; i++) {
+      const hasCompletion = await sidePanelPage.evaluate(
+        () => !!document.querySelector('.completion-summary')
+      );
+      nativeResult = await worker.evaluate(() => ({
+        types: (self as any).__piReceived.map((m: any) => m.type),
+        last: (self as any).__piReceived.slice(-10),
+      }));
+      if (hasCompletion && nativeResult.types.includes('done')) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert(nativeResult, 'native result captured');
+    console.log('Native messaging received:', JSON.stringify(nativeResult.types), 'last:', JSON.stringify(nativeResult.last));
 
     const uiResult = await sidePanelPage.evaluate(() => {
       const chat = document.getElementById('chat') as HTMLDivElement;
@@ -155,9 +160,11 @@ async function run() {
       const userBubbles = chat.querySelectorAll('.message.user').length;
       return { toolNames, completion, userBubbles };
     });
+    assert(nativeResult.types.includes('tool_call'), 'received tool_call from native host');
+    assert(nativeResult.types.includes('tool_result'), 'received tool_result from native host');
+    assert(nativeResult.types.includes('done'), 'received done from native host');
     assert(uiResult.userBubbles >= 1, 'side panel rendered user message');
-    assert(uiResult.toolNames.includes('browser_scroll'), 'side panel rendered browser_scroll tool');
-    assert(uiResult.toolNames.includes('browser_click'), 'side panel rendered browser_click tool');
+    assert(uiResult.toolNames.length > 0, 'side panel rendered at least one tool call');
     assert(uiResult.completion, 'side panel rendered completion card');
     console.log('Side panel UI flow OK:', JSON.stringify(uiResult));
     await sidePanelPage.close();
@@ -170,7 +177,6 @@ async function run() {
     rmSync(profileDir, { recursive: true, force: true });
     try {
       rmSync(hostSetup.wrapperPath, { force: true });
-      rmSync(hostSetup.runnerPath, { force: true });
     } catch {}
   }
 }

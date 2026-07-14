@@ -8,32 +8,26 @@ export interface HostSetup {
   profileDir: string;
   manifestPath: string;
   wrapperPath: string;
-  runnerPath: string;
 }
 
-export function setupMockHost(profileDir: string): HostSetup {
+export function setupHost(profileDir: string): HostSetup {
   const projectRoot = resolve('.');
   const hostIndex = resolve('dist/host/index.js');
-  const mockPi = resolve('dist/scripts/mock-pi.js');
   const nativeHostsDir = join(profileDir, 'NativeMessagingHosts');
 
   mkdirSync(nativeHostsDir, { recursive: true });
 
-  const runnerPath = join(projectRoot, 'dist/e2e/mock-pi-runner.sh');
-  const wrapperPath = join(projectRoot, 'dist/e2e/mock-pi-wrapper.sh');
+  const wrapperPath = join(projectRoot, 'dist/e2e/host-wrapper.sh');
 
-  const runner = `#!/bin/bash\nexec node ${mockPi} agent\n`;
-  const wrapper = `#!/bin/bash\nexport PI_COMMAND=${runnerPath}\nexec node ${hostIndex}\n`;
+  const wrapper = `#!/bin/bash\nexec node ${hostIndex}\n`;
 
   mkdirSync(resolve('dist/e2e'), { recursive: true });
-  writeFileSync(runnerPath, runner, { mode: 0o755 });
   writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
-  chmodSync(runnerPath, 0o755);
   chmodSync(wrapperPath, 0o755);
 
   const manifest = {
     name: NATIVE_HOST_NAME,
-    description: 'Pi Browser Agent Native Host (e2e mock)',
+    description: 'Pi Browser Agent Native Host',
     path: wrapperPath,
     type: 'stdio',
     allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
@@ -42,5 +36,5 @@ export function setupMockHost(profileDir: string): HostSetup {
   const manifestPath = join(nativeHostsDir, `${NATIVE_HOST_NAME}.json`);
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
-  return { profileDir, manifestPath, wrapperPath, runnerPath };
+  return { profileDir, manifestPath, wrapperPath };
 }
