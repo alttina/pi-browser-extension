@@ -1,9 +1,8 @@
-import { launch, type Browser, type Target } from 'puppeteer-core';
+import { chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
-import { findChromium } from './find-chromium.js';
 import { setupHost, EXTENSION_ID } from './setup-host.js';
 
 const EXTENSION_PATH = resolve('dist/extension');
@@ -31,14 +30,17 @@ function startTestServer(): Promise<{ server: Server; url: string }> {
   });
 }
 
-async function run() {
-  const chromium = findChromium();
-  if (!chromium) {
-    console.log('SKIP: no Chromium/Chrome for Testing binary found');
-    process.exit(0);
-  }
-  console.log(`Using Chromium: ${chromium}`);
+async function getServiceWorker(context: BrowserContext): Promise<Worker> {
+  const existing = context.serviceWorkers()[0];
+  if (existing) return existing;
+  const [worker] = await Promise.all([
+    context.waitForEvent('serviceworker'),
+    context.newPage(),
+  ]);
+  return worker;
+}
 
+async function run() {
   const { server, url: testUrl } = await startTestServer();
   console.log(`Test server: ${testUrl}`);
 
@@ -46,38 +48,24 @@ async function run() {
   const hostSetup = setupHost(profileDir);
   console.log(`Profile: ${profileDir}`);
 
-  let browser: Browser | null = null;
+  const context = await chromium.launchPersistentContext(profileDir, {
+    headless: false,
+    args: [
+      `--disable-extensions-except=${EXTENSION_PATH}`,
+      `--load-extension=${EXTENSION_PATH}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
+  });
+
   try {
-    browser = await launch({
-      headless: true,
-      executablePath: chromium,
-      userDataDir: profileDir,
-      args: [
-        `--disable-extensions-except=${EXTENSION_PATH}`,
-        `--load-extension=${EXTENSION_PATH}`,
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
-    });
-
-    await new Promise((r) => setTimeout(r, 2000));
-
-    const targets: Target[] = browser.targets();
-    const swTarget = targets.find(
-      (t: Target) => t.type() === 'service_worker' && t.url().startsWith(`chrome-extension://${EXTENSION_ID}/`)
-    );
-    assert(swTarget, 'service worker loaded');
-    console.log('Service worker:', swTarget.url());
+    const worker = await getServiceWorker(context);
+    console.log('Service worker:', worker.url());
 
     // Content script test
-    const page = await browser.newPage();
-    page.on('console', (c: any) => console.log('[content console]', c.text()));
-    page.on('pageerror', (err: any) => console.log('[content error]', err.message));
+    const page: Page = await context.newPage();
     await page.goto(testUrl);
-    await new Promise((r) => setTimeout(r, 2000));
-
-    const worker = await swTarget.worker();
-    assert(worker, 'service worker has execution context');
+    await page.waitForTimeout(2000);
 
     const contentResult = await worker.evaluate(async (expectedUrl: string) => {
       const tabs = await new Promise<chrome.tabs.Tab[]>((resolve) => chrome.tabs.query({}, resolve));
@@ -98,13 +86,11 @@ async function run() {
     console.log('Content script OK:', JSON.stringify(contentResult.response));
 
     // UI flow + native messaging end-to-end (single host via service-worker bridge)
-    const sidePanelPage = await browser.newPage();
+    const sidePanelPage = await context.newPage();
     await sidePanelPage.goto(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
-    await new Promise((r) => setTimeout(r, 500));
-    const hasInput = await sidePanelPage.evaluate(() => !!document.querySelector('#input'));
-    const hasSend = await sidePanelPage.evaluate(() => !!document.querySelector('#sendBtn'));
-    assert(hasInput, 'side panel has #input');
-    assert(hasSend, 'side panel has #sendBtn');
+    await sidePanelPage.waitForTimeout(500);
+    await sidePanelPage.waitForSelector('#input');
+    await sidePanelPage.waitForSelector('#sendBtn');
     console.log('Side panel UI opened');
 
     await worker.evaluate(async (expectedUrl: string) => {
@@ -134,23 +120,16 @@ async function run() {
       });
     }, testUrl);
 
-    await sidePanelPage.type('#input', 'click the load-more button');
-    await sidePanelPage.click('#sendBtn');
+    await sidePanelPage.locator('#input').fill('click the load-more button');
+    await sidePanelPage.locator('#sendBtn').click();
 
     // Wait for the side panel to render the completion card (up to 20s).
-    let nativeResult: { types: string[]; last: unknown[] } | null = null;
-    for (let i = 0; i < 200; i++) {
-      const hasCompletion = await sidePanelPage.evaluate(
-        () => !!document.querySelector('.completion-summary')
-      );
-      nativeResult = await worker.evaluate(() => ({
-        types: (self as any).__piReceived.map((m: any) => m.type),
-        last: (self as any).__piReceived.slice(-10),
-      }));
-      if (hasCompletion && nativeResult.types.includes('done')) break;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    assert(nativeResult, 'native result captured');
+    await sidePanelPage.waitForSelector('.completion-summary', { timeout: 20000 });
+
+    const nativeResult = await worker.evaluate(() => ({
+      types: (self as any).__piReceived.map((m: any) => m.type),
+      last: (self as any).__piReceived.slice(-10),
+    }));
     console.log('Native messaging received:', JSON.stringify(nativeResult.types), 'last:', JSON.stringify(nativeResult.last));
 
     const uiResult = await sidePanelPage.evaluate(() => {
@@ -168,11 +147,10 @@ async function run() {
     assert(uiResult.completion, 'side panel rendered completion card');
     console.log('Side panel UI flow OK:', JSON.stringify(uiResult));
     await sidePanelPage.close();
-
     await page.close();
     console.log('\nAll e2e assertions passed.');
   } finally {
-    if (browser) await browser.close();
+    await context.close();
     server.close();
     rmSync(profileDir, { recursive: true, force: true });
     try {

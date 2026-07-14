@@ -12,12 +12,12 @@
     "install:host": "node dist/scripts/install-host.js"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.80.6",
     "@earendil-works/pi-agent-core": "^0.80.6",
     "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-coding-agent": "^0.80.6",
+    "@playwright/test": "^1.61.1",
     "@types/chrome": "^0.2.2",
     "@types/node": "^26.1.1",
-    "puppeteer-core": "^25.3.0",
     "typebox": "^1.1.38",
     "typescript": "^5.5.0"
   }
