@@ -100,6 +100,49 @@ body {
   color: var(--text);
 }
 
+.agent-status-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.status-main {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-label {
+  text-transform: capitalize;
+}
+
+.status-working .status-dot {
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite both;
+}
+
+.status-done .status-dot {
+  background: #1e8e3e;
+}
+
+#statusStep {
+  font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
 .chat {
   flex: 1;
   overflow-y: auto;

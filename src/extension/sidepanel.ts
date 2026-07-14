@@ -1,8 +1,77 @@
-import type { Message, ToolCallMessage, ToolResultMessage, DoneMessage } from '../shared/messages.js';
+import type { Message, ToolCallMessage, ToolResultMessage, DoneMessage, StatusMessage, AgentStatus } from '../shared/messages.js';
 
 const chat = document.getElementById('chat') as HTMLDivElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement;
+
+const statusPanel = document.getElementById('agentStatusPanel') as HTMLDivElement;
+const statusMain = document.getElementById('statusMain') as HTMLDivElement;
+const statusLabel = document.getElementById('statusLabel') as HTMLSpanElement;
+const statusTools = document.getElementById('statusTools') as HTMLSpanElement;
+const statusTokens = document.getElementById('statusTokens') as HTMLSpanElement;
+const statusStep = document.getElementById('statusStep') as HTMLSpanElement;
+
+const statusLabels: Record<AgentStatus, string> = {
+  thinking: 'Thinking',
+  writing: 'Writing',
+  screenshotting: 'Screenshotting',
+  working: 'Working',
+};
+
+const stepLabels: Record<AgentStatus, string> = {
+  thinking: 'Thinking…',
+  writing: 'Writing…',
+  screenshotting: 'Taking screenshot…',
+  working: 'Running tool…',
+};
+
+function updateStatus(msg: StatusMessage) {
+  statusPanel.classList.add('status-working');
+  statusPanel.classList.remove('status-done');
+  statusLabel.textContent = statusLabels[msg.state];
+  statusTools.textContent = `Tools: ${msg.toolCount}`;
+  if (msg.totalTokens && msg.totalTokens > 0) {
+    statusTokens.classList.remove('hidden');
+    statusTokens.textContent = `Tokens: ${msg.totalTokens.toLocaleString()}`;
+  } else {
+    statusTokens.classList.add('hidden');
+  }
+  statusStep.textContent = stepLabels[msg.state];
+}
+
+function formatDuration(totalMs: number): string {
+  const totalSeconds = Math.round(totalMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}min`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+  return parts.join(' ');
+}
+
+function setDoneStatus(toolCount: number, totalMs: number, totalTokens?: number) {
+  statusPanel.classList.remove('status-working');
+  statusPanel.classList.add('status-done');
+  statusLabel.textContent = 'Done';
+  statusTools.textContent = `Tools: ${toolCount}`;
+  if (totalTokens && totalTokens > 0) {
+    statusTokens.classList.remove('hidden');
+    statusTokens.textContent = `Tokens: ${totalTokens.toLocaleString()}`;
+  } else {
+    statusTokens.classList.add('hidden');
+  }
+  statusStep.textContent = `Worked for ${formatDuration(totalMs)}`;
+}
+
+function resetStatus() {
+  statusPanel.classList.remove('status-working', 'status-done');
+  statusLabel.textContent = 'Ready';
+  statusTools.textContent = 'Tools: 0';
+  statusTokens.classList.add('hidden');
+  statusStep.textContent = '—';
+}
 
 function appendUser(text: string) {
   const row = document.createElement('div');
@@ -51,15 +120,18 @@ function updateToolResult(msg: ToolResultMessage) {
 }
 
 function appendDone(msg: DoneMessage) {
+  setDoneStatus(msg.toolCount, msg.totalMs, msg.totalTokens);
+
   const row = document.createElement('div');
   row.className = 'message agent';
   const trajectory = toolHistory.map((t) => escapeHtml(t.name)).join(' → ');
   const detailsId = `completion-details-${Date.now()}`;
+  const tokenText = msg.totalTokens ? ` · ${msg.totalTokens.toLocaleString()} tokens` : '';
   row.innerHTML = `
     <div class="completion-card">
       <div class="completion-header">
         <div class="completion-badge">Done</div>
-        <div class="completion-meta-inline">${msg.toolCount} tools · ${msg.totalMs}ms</div>
+        <div class="completion-meta-inline">${msg.toolCount} tools${tokenText} · ${formatDuration(msg.totalMs)}</div>
       </div>
       <div class="completion-summary">${escapeHtml(msg.summary)}</div>
       <div class="completion-tools">
@@ -135,6 +207,10 @@ function send() {
   input.value = '';
   toolHistory.length = 0;
   toolCards.clear();
+  resetStatus();
+  statusPanel.classList.add('status-working');
+  statusLabel.textContent = 'Working';
+  statusStep.textContent = 'Starting…';
   chrome.runtime.sendMessage({ type: 'user', text });
 }
 
@@ -149,6 +225,7 @@ input.addEventListener('keydown', (e) => {
 chrome.runtime.onMessage.addListener((msg: Message) => {
   if (msg.type === 'tool_call' && msg.ui === true) appendToolCall(msg);
   else if (msg.type === 'tool_result' && msg.ui === true) updateToolResult(msg);
+  else if (msg.type === 'status') updateStatus(msg);
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'assistant') appendAgentText(msg.text);
   else if (msg.type === 'error') appendAgentText(`Error: ${msg.message}`);

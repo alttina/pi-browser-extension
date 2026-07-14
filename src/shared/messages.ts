@@ -31,11 +31,21 @@ export interface DoneMessage {
   summary: string;
   toolCount: number;
   totalMs: number;
+  totalTokens?: number;
 }
 
 export interface ErrorMessage {
   type: 'error';
   message: string;
+}
+
+export type AgentStatus = 'thinking' | 'writing' | 'screenshotting' | 'working';
+
+export interface StatusMessage {
+  type: 'status';
+  state: AgentStatus;
+  toolCount: number;
+  totalTokens?: number;
 }
 
 export type Message =
@@ -44,4 +54,5 @@ export type Message =
   | ToolCallMessage
   | ToolResultMessage
   | DoneMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | StatusMessage;

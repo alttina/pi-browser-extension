@@ -14,7 +14,7 @@ import {
   FindElementSchema,
   type BrowserToolName,
 } from './browser-tools.js';
-import type { Message, ToolCallMessage, ToolResultMessage, DoneMessage } from '../shared/messages.js';
+import type { Message, ToolCallMessage, ToolResultMessage, DoneMessage, StatusMessage, AgentStatus } from '../shared/messages.js';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -39,6 +39,8 @@ export class AgentHost {
 
   private startMs = 0;
   private toolCount = 0;
+  private totalTokens = 0;
+  private currentStatus: AgentStatus = 'thinking';
   private settled = false;
   private pendingToolCalls = new Map<string, { name: BrowserToolName; startMs: number }>();
 
@@ -86,6 +88,8 @@ export class AgentHost {
     if (!this.session) throw new Error('Agent session not bound');
     this.startMs = Date.now();
     this.toolCount = 0;
+    this.totalTokens = 0;
+    this.currentStatus = 'thinking';
     this.settled = false;
     await this.session.sendUserMessage(text);
   }
@@ -131,14 +135,48 @@ export class AgentHost {
     return { content, details: { ...(result ?? {}), elapsedMs } };
   }
 
+  private emitStatus(state: AgentStatus) {
+    if (state === this.currentStatus) return;
+    this.currentStatus = state;
+    const status: StatusMessage = {
+      type: 'status',
+      state,
+      toolCount: this.toolCount,
+      totalTokens: this.totalTokens || undefined,
+    };
+    this.onMessage(status);
+  }
+
   private handleEvent(event: Record<string, unknown>) {
     switch (event.type) {
+      case 'message_update': {
+        const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined;
+        const eventType = assistantEvent?.type;
+        if (eventType === 'text_delta') {
+          this.emitStatus('writing');
+        } else if (eventType === 'thinking_delta') {
+          this.emitStatus('thinking');
+        } else if (eventType === 'toolcall_start') {
+          this.emitStatus('working');
+        }
+        break;
+      }
+      case 'message_end': {
+        const message = event.message as Record<string, unknown> | undefined;
+        const usage = message?.usage as Record<string, unknown> | undefined;
+        const totalTokens = typeof usage?.totalTokens === 'number' ? usage.totalTokens : 0;
+        if (totalTokens > 0) {
+          this.totalTokens = totalTokens;
+        }
+        break;
+      }
       case 'tool_execution_start': {
         const toolCallId = String(event.toolCallId);
         const toolName = String(event.toolName) as BrowserToolName;
         const callMsg: ToolCallMessage = { type: 'tool_call', id: toolCallId, name: toolName, args: (event.args as Record<string, unknown>) ?? {}, ui: true };
         this.pendingToolCalls.set(toolCallId, { name: toolName, startMs: Date.now() });
         this.onMessage(callMsg);
+        this.emitStatus(toolName === 'browser_screenshot' ? 'screenshotting' : 'working');
         break;
       }
       case 'tool_execution_end': {
@@ -148,6 +186,7 @@ export class AgentHost {
         const resultMsg: ToolResultMessage = { type: 'tool_result', id: toolCallId, result: event.result, elapsedMs, ui: true };
         this.onMessage(resultMsg);
         this.pendingToolCalls.delete(toolCallId);
+        this.emitStatus('thinking');
         break;
       }
       case 'agent_settled':
@@ -156,7 +195,7 @@ export class AgentHost {
         this.settled = true;
         const summary = this.session?.getLastAssistantText() || 'Done.';
         const totalMs = Date.now() - this.startMs;
-        const doneMsg: DoneMessage = { type: 'done', summary, toolCount: this.toolCount, totalMs };
+        const doneMsg: DoneMessage = { type: 'done', summary, toolCount: this.toolCount, totalMs, totalTokens: this.totalTokens || undefined };
         this.onMessage(doneMsg);
         break;
       }
