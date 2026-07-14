@@ -94,8 +94,11 @@ async function run() {
   console.log(`Fixture server: ${fixtureUrl}`);
 
   const profileDir = mkdtempSync(join(tmpdir(), 'pi-browser-agent-e2e-'));
-  const hostSetup = setupHost(profileDir);
+  const logDir = join(process.cwd(), 'e2e-context-logs', Date.now().toString());
+  mkdirSync(logDir, { recursive: true });
+  const hostSetup = setupHost(profileDir, logDir);
   console.log(`Profile: ${profileDir}`);
+  console.log(`Context logs: ${logDir}`);
 
   const context = await chromium.launchPersistentContext(profileDir, {
     headless: false,

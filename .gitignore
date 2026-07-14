@@ -3,4 +3,5 @@ node_modules/
 dist/
 .DS_Store
 e2e-screenshots/
+e2e-context-logs/
 

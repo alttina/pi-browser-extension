@@ -1,8 +1,11 @@
 import { AgentHost } from './agent.js';
 import { encodeMessage, decodeMessages } from './protocol.js';
+import { ContextLogger } from './context-logger.js';
 import type { Message, ToolCallMessage, ToolResultMessage } from '../shared/messages.js';
 
 const TOOL_RESULT_TIMEOUT_MS = 60_000;
+const LOG_DIR = process.env.PI_BROWSER_AGENT_LOG_DIR;
+const logger = LOG_DIR ? new ContextLogger(LOG_DIR) : null;
 
 const pendingToolCalls = new Map<
   string,
@@ -11,6 +14,7 @@ const pendingToolCalls = new Map<
 
 async function main() {
   const host = new AgentHost(async (toolCall: ToolCallMessage): Promise<ToolResultMessage> => {
+    logger?.log('out', toolCall);
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         pendingToolCalls.delete(toolCall.id);
@@ -22,6 +26,7 @@ async function main() {
   });
 
   host.onMessage = (msg: Message) => {
+    logger?.log('out', msg);
     process.stdout.write(encodeMessage(msg));
   };
 
@@ -35,6 +40,7 @@ async function main() {
     const { messages, remainder } = decodeMessages(buffer);
     buffer = remainder as unknown as Buffer;
     for (const msg of messages) {
+      logger?.log('in', msg);
       if (msg.type === 'user') {
         host.sendUserMessage(msg.text).catch((err: Error) => {
           process.stdout.write(encodeMessage({ type: 'error', message: err.message }));

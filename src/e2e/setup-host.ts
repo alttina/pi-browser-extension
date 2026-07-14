@@ -10,7 +10,7 @@ export interface HostSetup {
   wrapperPath: string;
 }
 
-export function setupHost(profileDir: string): HostSetup {
+export function setupHost(profileDir: string, logDir?: string): HostSetup {
   const projectRoot = resolve('.');
   const hostIndex = resolve('dist/host/index.js');
   const nativeHostsDir = join(profileDir, 'NativeMessagingHosts');
@@ -19,8 +19,8 @@ export function setupHost(profileDir: string): HostSetup {
 
   const wrapperPath = join(projectRoot, 'dist/e2e/host-wrapper.sh');
 
-  const wrapper = `#!/bin/bash\ncd ${projectRoot}\nexport PI_THINKING_LEVEL=off
-exec node ${hostIndex}\n`;
+  const logDirLine = logDir ? `export PI_BROWSER_AGENT_LOG_DIR=${logDir}\n` : '';
+  const wrapper = `#!/bin/bash\ncd ${projectRoot}\nexport PI_THINKING_LEVEL=off\n${logDirLine}exec node ${hostIndex}\n`;
 
   mkdirSync(resolve('dist/e2e'), { recursive: true });
   writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
