@@ -9,7 +9,18 @@ function connectPort() {
     port = null;
   });
   port.onMessage.addListener((msg: Message) => {
-    chrome.runtime.sendMessage(msg).catch(() => {});
+    if (msg.type === 'tool_call' && !msg.ui) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tabId = tabs[0]?.id;
+        if (tabId) {
+          chrome.tabs.sendMessage(tabId, msg, (res) => {
+            if (res && port) port.postMessage(res);
+          });
+        }
+      });
+    } else {
+      chrome.runtime.sendMessage(msg).catch(() => {});
+    }
   });
 }
 
@@ -27,6 +38,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     });
     return true;
   }
+  if (!port) connectPort();
   if (msg.type === 'user' && port) {
     port.postMessage(msg);
     sendResponse({ ok: true });

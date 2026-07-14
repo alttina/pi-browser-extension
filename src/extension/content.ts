@@ -133,7 +133,7 @@ const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolRe
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type === 'tool_call') {
+  if (msg.type === 'tool_call' && msg.ui !== true) {
     const handler = handlers[msg.name];
     if (!handler) {
       sendResponse({ type: 'error', message: `Unknown tool: ${msg.name}` });

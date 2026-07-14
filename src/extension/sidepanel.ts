@@ -85,8 +85,8 @@ input.addEventListener('keydown', (e) => {
 });
 
 chrome.runtime.onMessage.addListener((msg: Message) => {
-  if (msg.type === 'tool_call') appendToolCall(msg);
-  else if (msg.type === 'tool_result') updateToolResult(msg);
+  if (msg.type === 'tool_call' && msg.ui === true) appendToolCall(msg);
+  else if (msg.type === 'tool_result' && msg.ui === true) updateToolResult(msg);
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'assistant') appendAgentText(msg.text);
   else if (msg.type === 'error') appendAgentText(`Error: ${msg.message}`);

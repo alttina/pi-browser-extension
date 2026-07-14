@@ -13,6 +13,8 @@ export interface ToolCallMessage {
   id: string;
   name: string;
   args: Record<string, unknown>;
+  /** When true, this message is for UI visualization only and should not be executed. */
+  ui?: boolean;
 }
 
 export interface ToolResultMessage {
@@ -20,6 +22,8 @@ export interface ToolResultMessage {
   id: string;
   result: unknown;
   elapsedMs: number;
+  /** When true, this message is for UI visualization only. */
+  ui?: boolean;
 }
 
 export interface DoneMessage {
