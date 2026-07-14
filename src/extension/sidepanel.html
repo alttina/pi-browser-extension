@@ -7,29 +7,144 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <div class="header">
-    <div class="brand">
-      <div class="brand-icon">π</div>
-      <div class="brand-title">Pi Browser Agent</div>
-    </div>
-    <div class="header-actions">
-      <div class="status">
-        <div class="status-dot"></div>
-        <span>sonnet-4</span>
+  <div class="side-panel">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">π</div>
+        <div class="brand-title">Pi Browser Agent</div>
       </div>
-      <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
-      <button class="icon-btn" id="newChatBtn" title="New chat">+</button>
+      <div class="header-actions">
+        <div class="status" id="statusBadge">
+          <div class="status-dot"></div>
+          <span>sonnet-4</span>
+        </div>
+        <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+        <button class="icon-btn hidden" id="closeSettingsBtn" title="Close settings">✕</button>
+        <button class="icon-btn" id="newChatBtn" title="New chat">+</button>
+      </div>
     </div>
-  </div>
 
-  <div class="chat" id="chat"></div>
+    <div class="chat" id="chat"></div>
 
-  <div class="input-area">
-    <div class="input-wrapper">
-      <textarea id="input" rows="1" placeholder="Tell Pi what to do in this tab..."></textarea>
-      <button class="send-btn" id="sendBtn">➜</button>
+    <div class="input-area" id="inputArea">
+      <div class="input-wrapper">
+        <textarea id="input" rows="1" placeholder="Tell Pi what to do in this tab..."></textarea>
+        <button class="send-btn" id="sendBtn">➜</button>
+      </div>
+      <div class="input-hint">Enter to send · Shift+Enter for new line</div>
     </div>
-    <div class="input-hint">Enter to send · Shift+Enter for new line</div>
+
+    <div class="settings-view hidden" id="settingsView">
+      <div class="settings-content">
+        <div class="page-header">
+          <h1>Settings</h1>
+          <div class="subtitle">Configure LLM connection and browser behavior.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Authentication</div>
+
+          <label>How should the agent authenticate?</label>
+          <div class="radio-group" id="authModeGroup">
+            <div class="radio-option selected" data-value="pi">
+              <div class="radio-option-title">Use Pi login</div>
+              <div class="radio-option-desc">Inherit API keys from Pi's auth.json</div>
+            </div>
+            <div class="radio-option" data-value="manual">
+              <div class="radio-option-title">Configure here</div>
+              <div class="radio-option-desc">Enter provider details manually</div>
+            </div>
+          </div>
+
+          <div class="note">
+            Pi will use whichever provider is currently active. Run <code>/login</code> in Pi to switch providers, or edit <code>~/.pi/agent/auth.json</code>.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Model</div>
+
+          <div class="form-group">
+            <label for="provider">Provider</label>
+            <select id="provider">
+              <option>Anthropic</option>
+              <option>OpenAI</option>
+              <option>OpenRouter</option>
+              <option>Custom</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="model">Model</label>
+            <input type="text" id="model" value="claude-sonnet-4-20250514">
+            <div class="hint">Model ID passed to Pi.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="apiKey">API Key</label>
+            <input type="password" id="apiKey" value="sk-ant-api03-••••••••••••••••••••••">
+            <div class="hint">Stored in browser local storage and synced to Pi's auth.json.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Browser Behavior</div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="toggle-title">Auto-screenshot after tools</span>
+              <span class="toggle-desc">Send a viewport screenshot back to Pi after each action</span>
+            </div>
+            <div class="toggle active" id="autoScreenshot" data-key="autoScreenshot"></div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="toggle-title">Highlight targeted elements</span>
+              <span class="toggle-desc">Draw a border around elements the agent is interacting with</span>
+            </div>
+            <div class="toggle active" id="highlightTarget" data-key="highlightTarget"></div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="toggle-title">Confirm sensitive actions</span>
+              <span class="toggle-desc">Ask before clicks on payment, delete, or external navigation</span>
+            </div>
+            <div class="toggle" id="confirmSensitive" data-key="confirmSensitive"></div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="toggle-title">Full-page screenshots</span>
+              <span class="toggle-desc">Default to full page instead of viewport only</span>
+            </div>
+            <div class="toggle" id="fullPageScreenshot" data-key="fullPageScreenshot"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Advanced</div>
+
+          <div class="form-group">
+            <label for="nativeHostPath">Native Host Path</label>
+            <input type="text" id="nativeHostPath" value="/Users/you/.pi/browser-agent/native-host">
+            <div class="hint">Path to the native messaging host.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="piPath">Pi CLI Path</label>
+            <input type="text" id="piPath" value="pi">
+            <div class="hint">Command to launch Pi.</div>
+          </div>
+        </div>
+
+        <div class="footer-actions">
+          <button class="btn" id="resetBtn">Reset</button>
+          <button class="btn btn-primary" id="saveBtn">Save changes</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="sidepanel.js"></script>
