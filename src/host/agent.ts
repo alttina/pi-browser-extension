@@ -1,4 +1,4 @@
-import { createAgentSession, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, DefaultResourceLoader, getAgentDir, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { AgentToolResult } from '@earendil-works/pi-agent-core';
 import type { ImageContent, TextContent } from '@earendil-works/pi-ai/compat';
 import { Type, type Static, type TSchema } from 'typebox';
@@ -25,6 +25,7 @@ export class AgentHost {
 
   private startMs = 0;
   private toolCount = 0;
+  private settled = false;
   private pendingToolCalls = new Map<string, { name: BrowserToolName; startMs: number }>();
 
   constructor(sendToExtension: SendToExtension) {
@@ -47,6 +48,11 @@ export class AgentHost {
     const { session } = await createAgentSession({
       noTools: 'builtin',
       customTools: tools,
+      resourceLoader: new DefaultResourceLoader({
+        cwd: process.cwd(),
+        agentDir: getAgentDir(),
+        noExtensions: true,
+      }),
     });
     return session;
   }
@@ -60,6 +66,7 @@ export class AgentHost {
     if (!this.session) throw new Error('Agent session not bound');
     this.startMs = Date.now();
     this.toolCount = 0;
+    this.settled = false;
     await this.session.sendUserMessage(text);
   }
 
@@ -109,7 +116,7 @@ export class AgentHost {
       case 'tool_execution_start': {
         const toolCallId = String(event.toolCallId);
         const toolName = String(event.toolName) as BrowserToolName;
-        const callMsg: ToolCallMessage = { type: 'tool_call', id: toolCallId, name: toolName, args: (event.args as Record<string, unknown>) ?? {} };
+        const callMsg: ToolCallMessage = { type: 'tool_call', id: toolCallId, name: toolName, args: (event.args as Record<string, unknown>) ?? {}, ui: true };
         this.pendingToolCalls.set(toolCallId, { name: toolName, startMs: Date.now() });
         this.onMessage(callMsg);
         break;
@@ -118,13 +125,15 @@ export class AgentHost {
         const toolCallId = String(event.toolCallId);
         const pending = this.pendingToolCalls.get(toolCallId);
         const elapsedMs = pending ? Date.now() - pending.startMs : 0;
-        const resultMsg: ToolResultMessage = { type: 'tool_result', id: toolCallId, result: event.result, elapsedMs };
+        const resultMsg: ToolResultMessage = { type: 'tool_result', id: toolCallId, result: event.result, elapsedMs, ui: true };
         this.onMessage(resultMsg);
         this.pendingToolCalls.delete(toolCallId);
         break;
       }
       case 'agent_settled':
       case 'agent_end': {
+        if (this.settled) break;
+        this.settled = true;
         const summary = this.session?.getLastAssistantText() || 'Done.';
         const totalMs = Date.now() - this.startMs;
         const doneMsg: DoneMessage = { type: 'done', summary, toolCount: this.toolCount, totalMs };
