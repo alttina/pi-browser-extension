@@ -33,7 +33,7 @@
     "default_title": "Open Pi Browser Agent"
   },
   "commands": {
-    "_execute_side_panel_action": {
+    "_execute_action": {
       "suggested_key": {
         "default": "Ctrl+Shift+Y",
         "mac": "Command+Shift+Y"

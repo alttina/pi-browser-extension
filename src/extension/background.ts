@@ -25,11 +25,29 @@ function connectPort() {
 }
 
 chrome.action.onClicked.addListener((tab) => {
-  chrome.sidePanel.open({ tabId: tab.id! });
+  chrome.sidePanel.open({ tabId: tab.id! }).catch((err: Error) => {
+    console.error('[background] sidePanel.open failed:', err.message);
+  });
   if (!port) connectPort();
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'open_side_panel') {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ ok: false, error: 'no sender tab' });
+      return false;
+    }
+    (async () => {
+      try {
+        await chrome.sidePanel.open({ tabId });
+      } catch (err: any) {
+        console.error('[background] sidePanel.open failed:', err.message);
+      }
+    })();
+    sendResponse({ ok: true });
+    return false;
+  }
   if (msg.type === 'capture_tab') {
     chrome.tabs.captureVisibleTab({ format: 'png' }).then((dataUrl) => {
       sendResponse({ screenshot: dataUrl });

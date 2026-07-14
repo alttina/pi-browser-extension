@@ -240,6 +240,27 @@ const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolRe
   browser_find_element: findElementTool,
 };
 
+function injectSidePanelTrigger() {
+  if (document.getElementById('pi-browser-agent-trigger')) return;
+  const btn = document.createElement('button');
+  btn.id = 'pi-browser-agent-trigger';
+  btn.setAttribute('aria-hidden', 'true');
+  btn.setAttribute('data-testid', 'pi-open-side-panel');
+  // Positioned in-viewport but visually hidden so Playwright can click it as a real user gesture.
+  btn.style.cssText =
+    'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:auto;z-index:2147483647;border:none;padding:0;margin:0;';
+  btn.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'open_side_panel' });
+  });
+  document.body.appendChild(btn);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectSidePanelTrigger);
+} else {
+  injectSidePanelTrigger();
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'tool_call' && msg.ui !== true) {
     const handler = handlers[msg.name];

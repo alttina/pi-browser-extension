@@ -80,11 +80,13 @@ async function closeBlankTabs(context: BrowserContext, keepPages: Page[]) {
 }
 
 async function openRealSidePanel(targetPage: Page) {
-  // Use the extension's keyboard shortcut to open the actual Chrome side panel.
-  // The shortcut is defined in manifest.json as _execute_side_panel_action.
-  const isMac = process.platform === 'darwin';
+  // Open the real Chrome side panel using a hidden content-script trigger button.
+  // The click is a genuine user gesture, so the background script's
+  // chrome.sidePanel.open() call is accepted by Chrome.
   await targetPage.bringToFront();
-  await targetPage.keyboard.press(isMac ? 'Meta+Shift+Y' : 'Control+Shift+Y');
+  await targetPage.waitForSelector('#pi-browser-agent-trigger');
+  await targetPage.click('#pi-browser-agent-trigger');
+  await new Promise((r) => setTimeout(r, 800));
 }
 
 async function run() {
@@ -97,6 +99,8 @@ async function run() {
 
   const context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
+    // Let Chrome resize the page when the real side panel opens.
+    viewport: null,
     args: [
       `--disable-extensions-except=${EXTENSION_PATH}`,
       `--load-extension=${EXTENSION_PATH}`,
