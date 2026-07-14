@@ -1,0 +1,60 @@
+import type { Page } from '@playwright/test';
+import type { ChatState, Task, TaskResult } from './tasks/index.js';
+
+export async function captureChatState(sidePanelPage: Page): Promise<ChatState> {
+  return sidePanelPage.evaluate(() => {
+    const chat = document.getElementById('chat');
+    if (!chat) return { userMessages: [], assistantMessages: [], toolCalls: [] };
+
+    const userMessages = Array.from(chat.querySelectorAll('.message.user .bubble-text')).map(
+      (el) => el.textContent || ''
+    );
+    const assistantMessages = Array.from(chat.querySelectorAll('.message.agent > .bubble > .bubble-text')).map(
+      (el) => el.textContent || ''
+    );
+    const toolCalls = Array.from(chat.querySelectorAll('.agent-card')).map((card) => {
+      const name = card.querySelector('.tool-name')?.textContent || '';
+      const id = card.getAttribute('data-tool-id') || '';
+      const args: Record<string, unknown> = {};
+      card.querySelectorAll('.tool-param').forEach((row) => {
+        const key = row.querySelector('.param-key')?.textContent || '';
+        const value = row.querySelector('.param-value')?.textContent || '';
+        if (key) {
+          try { args[key] = JSON.parse(value); }
+          catch { args[key] = value; }
+        }
+      });
+      return { id, name, args };
+    });
+    const completion = chat.querySelector('.completion-summary')?.textContent || undefined;
+
+    return { userMessages, assistantMessages, toolCalls, completion };
+  });
+}
+
+export interface TaskRunner {
+  targetPage: Page;
+  sidePanelPage: Page;
+  sendIntent(intent: string): Promise<void>;
+  waitForCompletion(options: { timeoutMs: number }): Promise<boolean>;
+}
+
+export async function runTask(runner: TaskRunner, task: Task): Promise<{ result: TaskResult; chat: ChatState; durationMs: number }> {
+  const start = Date.now();
+
+  await runner.targetPage.evaluate(() => window.__resetFixtureState());
+  await runner.targetPage.goto(`${runner.targetPage.url().split('#')[0]}${task.startUrl}`);
+
+  await runner.sendIntent(task.intent);
+  const completed = await runner.waitForCompletion({ timeoutMs: task.maxDurationMs });
+
+  const chat = await captureChatState(runner.sidePanelPage);
+  const durationMs = Date.now() - start;
+
+  if (!completed) {
+    return { result: { success: false, reason: `Timeout after ${durationMs}ms` }, chat, durationMs };
+  }
+
+  const result = await task.evaluate(runner.targetPage, chat);
+  return { result, chat, durationMs };
+}

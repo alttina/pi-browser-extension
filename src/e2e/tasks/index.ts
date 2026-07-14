@@ -1,5 +1,11 @@
 import type { Page } from '@playwright/test';
 
+declare global {
+  interface Window {
+    __resetFixtureState(): void;
+  }
+}
+
 export interface ChatState {
   userMessages: string[];
   assistantMessages: string[];
