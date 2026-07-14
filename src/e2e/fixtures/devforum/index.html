@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevForum</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="#/" class="logo">DevForum</a>
+    <nav>
+      <a href="#/category/javascript">JavaScript</a>
+      <a href="#/category/css">CSS</a>
+      <a href="#/category/general">General</a>
+      <a href="#/new" id="new-post-btn" class="btn btn-primary">New post</a>
+      <a href="#/login" id="login-btn" class="btn btn-secondary hidden">Log in</a>
+      <button id="logout-btn" class="btn btn-secondary hidden">Log out</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <section id="home-view" class="view">
+      <div class="page-header">
+        <h1>Latest posts</h1>
+        <p>Discuss development, tooling, and best practices.</p>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="search-input" placeholder="Search posts...">
+        <select id="category-filter">
+          <option value="">All categories</option>
+          <option value="javascript">JavaScript</option>
+          <option value="css">CSS</option>
+          <option value="general">General</option>
+        </select>
+      </div>
+      <div id="post-list" class="post-list"></div>
+    </section>
+
+    <section id="category-view" class="view hidden">
+      <div class="page-header">
+        <h1 id="category-title">Category</h1>
+        <a href="#/" class="btn btn-secondary">Back to latest</a>
+      </div>
+      <div id="category-post-list" class="post-list"></div>
+    </section>
+
+    <section id="post-view" class="view hidden">
+      <div id="post-detail"></div>
+      <div class="comments-section">
+        <h2>Comments</h2>
+        <div id="comments-list"></div>
+        <form id="comment-form">
+          <div class="form-group">
+            <label for="comment-author">Your name</label>
+            <input type="text" id="comment-author" required>
+          </div>
+          <div class="form-group">
+            <label for="comment-body">Comment</label>
+            <textarea id="comment-body" rows="3" required></textarea>
+          </div>
+          <button type="submit" id="submit-comment" class="btn btn-primary">Add comment</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="new-post-view" class="view hidden">
+      <h1>Create a new post</h1>
+      <form id="new-post-form">
+        <div class="form-group">
+          <label for="post-title">Title</label>
+          <input type="text" id="post-title" required>
+        </div>
+        <div class="form-group">
+          <label for="post-category">Category</label>
+          <select id="post-category" required>
+            <option value="javascript">JavaScript</option>
+            <option value="css">CSS</option>
+            <option value="general">General</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="post-author">Author</label>
+          <input type="text" id="post-author" required>
+        </div>
+        <div class="form-group">
+          <label for="post-body">Body</label>
+          <textarea id="post-body" rows="8" required></textarea>
+        </div>
+        <div class="form-actions">
+          <a href="#/" class="btn btn-secondary">Cancel</a>
+          <button type="submit" id="submit-post" class="btn btn-primary">Submit post</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="login-view" class="view hidden">
+      <h1>Log in to DevForum</h1>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required>
+        </div>
+        <button type="submit" id="login-submit" class="btn btn-primary">Log in</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -181,6 +181,12 @@ function handleCheckoutSubmit(e) {
   const cart = loadCart();
   if (cart.length === 0) return;
 
+  const captcha = document.getElementById('captcha-checkbox');
+  if (!captcha || !captcha.checked) {
+    showToast('Please verify that you are not a robot.');
+    return;
+  }
+
   const name = document.getElementById('full-name').value;
   const address = document.getElementById('address').value;
   const card = document.getElementById('card').value;

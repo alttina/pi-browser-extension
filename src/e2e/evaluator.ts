@@ -35,6 +35,7 @@ export async function captureChatState(sidePanelPage: Page): Promise<ChatState> 
 export interface TaskRunner {
   targetPage: Page;
   sidePanelPage: Page;
+  baseUrl: string;
   sendIntent(intent: string): Promise<void>;
   waitForCompletion(options: { timeoutMs: number }): Promise<boolean>;
 }
@@ -42,8 +43,9 @@ export interface TaskRunner {
 export async function runTask(runner: TaskRunner, task: Task): Promise<{ result: TaskResult; chat: ChatState; durationMs: number }> {
   const start = Date.now();
 
+  await runner.targetPage.goto(`${runner.baseUrl}${task.startUrl}`);
+  await runner.targetPage.waitForFunction(() => typeof window.__resetFixtureState === 'function');
   await runner.targetPage.evaluate(() => window.__resetFixtureState());
-  await runner.targetPage.goto(`${runner.targetPage.url().split('#')[0]}${task.startUrl}`);
 
   await runner.sendIntent(task.intent);
   const completed = await runner.waitForCompletion({ timeoutMs: task.maxDurationMs });

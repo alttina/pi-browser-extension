@@ -8,7 +8,7 @@ import { TASKS } from './tasks/index.js';
 import { runTask, captureChatState, type TaskRunner } from './evaluator.js';
 
 const EXTENSION_PATH = resolve('dist/extension');
-const FIXTURE_ROOT = resolve('dist/e2e/fixtures/onestopshop');
+const FIXTURE_ROOT = resolve('dist/e2e/fixtures');
 
 function resolve(p: string): string {
   return new URL(`file://${process.cwd()}/${p}`).pathname;
@@ -22,9 +22,23 @@ function startFixtureServer(): Promise<{ server: Server; url: string }> {
   return new Promise((resolve) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url || '/', `http://${req.headers.host}`);
-      let filePath = join(FIXTURE_ROOT, url.pathname === '/' ? 'index.html' : url.pathname);
+      const parts = url.pathname.split('/').filter(Boolean);
+      const fixtureName = parts[0] || 'onestopshop';
+      const remainingPath = parts.slice(1).join('/') || 'index.html';
+      const fixtureDir = join(FIXTURE_ROOT, fixtureName);
+      if (!existsSync(fixtureDir) || !statSync(fixtureDir).isDirectory()) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+      let filePath = join(fixtureDir, remainingPath);
       if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
-        filePath = join(FIXTURE_ROOT, 'index.html');
+        filePath = join(fixtureDir, 'index.html');
+      }
+      if (!existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
       }
       const ext = extname(filePath);
       const contentType =
@@ -75,7 +89,7 @@ async function run() {
     console.log('Service worker:', worker.url());
 
     const targetPage: Page = await context.newPage();
-    await targetPage.goto(fixtureUrl);
+    await targetPage.goto(`${fixtureUrl}onestopshop/`);
 
     // Load the side panel UI in a separate page so we can drive it without needing a
     // toolbar click. The extension's background script will connect the native host
@@ -95,6 +109,7 @@ async function run() {
     const runner: TaskRunner = {
       targetPage,
       sidePanelPage,
+      baseUrl: fixtureUrl.replace(/\/$/, ''),
       async sendIntent(intent: string) {
         await sidePanelPage.evaluate((text: string) => {
           const input = document.getElementById('input') as HTMLTextAreaElement;

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskFlow</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="#/" class="logo">TaskFlow</a>
+    <nav>
+      <a href="#/">Home</a>
+      <a href="#/board">Board</a>
+      <a href="#/task/new" id="new-task-nav">New task</a>
+    </nav>
+  </header>
+
+  <main id="app">
+    <section id="home-view" class="view">
+      <h1>Welcome to TaskFlow</h1>
+      <p>A simple Kanban-style task manager for your team.</p>
+      <div class="home-actions">
+        <a href="#/board" class="btn btn-primary">View board</a>
+        <a href="#/task/new" class="btn">Create task</a>
+      </div>
+    </section>
+
+    <section id="board-view" class="view hidden">
+      <div class="board-header">
+        <h1>Task Board</h1>
+        <a href="#/task/new" id="new-task-btn" class="btn btn-primary">New task</a>
+      </div>
+      <div class="board">
+        <div class="column" data-status="todo">
+          <h2>Todo</h2>
+          <div id="column-todo" class="column-content"></div>
+        </div>
+        <div class="column" data-status="in-progress">
+          <h2>In Progress</h2>
+          <div id="column-in-progress" class="column-content"></div>
+        </div>
+        <div class="column" data-status="done">
+          <h2>Done</h2>
+          <div id="column-done" class="column-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="task-form-view" class="view hidden">
+      <h1 id="task-form-title">Create Task</h1>
+      <form id="task-form">
+        <div class="form-group">
+          <label for="task-title">Title</label>
+          <input type="text" id="task-title" required>
+        </div>
+        <div class="form-group">
+          <label for="task-description">Description</label>
+          <textarea id="task-description" rows="4"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Status</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="task-status" id="status-todo" value="todo" checked> Todo</label>
+              <label class="radio-label"><input type="radio" name="task-status" id="status-in-progress" value="in-progress"> In Progress</label>
+              <label class="radio-label"><input type="radio" name="task-status" id="status-done" value="done"> Done</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="task-priority">Priority</label>
+            <select id="task-priority">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <a href="#/board" class="btn btn-secondary">Cancel</a>
+          <button type="submit" id="save-task-btn" class="btn btn-primary">Save task</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="task-detail-view" class="view hidden">
+      <div id="task-detail"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

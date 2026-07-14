@@ -42,21 +42,25 @@ WebArena-style benchmarks solve this by providing:
 ```
 
 1. Playwright launches Chrome with the extension loaded.
-2. A local HTTP server serves the `OneStopShop` fixture site.
+2. A single local HTTP server serves all fixture sites under path prefixes (e.g. `/onestopshop/`, `/taskflow/`, `/devforum/`).
 3. For each task, the runner:
-   - Resets fixture state (cart, orders).
-   - Navigates the target tab to the task's `startUrl`.
+   - Navigates the target tab to the task's `startUrl`, which includes the fixture path prefix.
+   - Resets the fixture site's state via `window.__resetFixtureState()`.
    - Opens the side panel via `chrome.sidePanel.open()` on the target tab.
    - Sends the task intent as a user message through the side-panel input.
    - Waits for the agent to settle or a max timeout.
    - Captures the final page state, side-panel chat, and screenshots.
 4. The evaluator checks success criteria defined per task.
 
-## Fixture Site: OneStopShop
+## Fixture Sites
 
-A minimal but realistic e-commerce site under `src/e2e/fixtures/onestopshop/`.
+The suite now includes three self-hosted fixture sites, all served from the same local HTTP server under path prefixes. Each site uses `localStorage` for state and exposes `window.__resetFixtureState()` for the test runner.
 
-### Pages
+### OneStopShop (`src/e2e/fixtures/onestopshop/`)
+
+A minimal but realistic e-commerce site.
+
+#### Pages
 
 | Path | Purpose |
 |------|---------|
@@ -64,29 +68,58 @@ A minimal but realistic e-commerce site under `src/e2e/fixtures/onestopshop/`.
 | `/products` | Product grid with search, category filter, price sort. |
 | `/product/:id` | Product detail with price, description, Add to Cart. |
 | `/cart` | Cart summary, quantity controls, Proceed to Checkout. |
-| `/checkout` | Shipping/payment form, Place Order. |
+| `/checkout` | Shipping/payment form, fake "I'm not a robot" checkbox, Place Order. |
 | `/order/:id` | Order confirmation with order number and summary. |
 
-### Product Catalog (sample)
-
-```json
-[
-  { "id": "p1", "name": "Wireless Headphones", "category": "audio", "price": 129.00, "stock": 10 },
-  { "id": "p2", "name": "Mechanical Keyboard", "category": "office", "price": 89.00, "stock": 5 },
-  { "id": "p3", "name": "USB-C Hub", "category": "accessories", "price": 49.00, "stock": 20 },
-  { "id": "p4", "name": "Webcam 4K", "category": "audio", "price": 159.00, "stock": 8 },
-  { "id": "p5", "name": "Monitor Arm", "category": "office", "price": 79.00, "stock": 0 }
-]
-```
-
-### State Management
-
-The site uses `localStorage` for cart and orders so the runner can reset state by clearing storage. Key structures:
+#### State Management
 
 - `onestopshop:cart` — array of `{ productId, quantity }`.
 - `onestopshop:orders` — array of `{ orderId, items, shipping, total, status }`.
 
-A reset endpoint (`window.__resetFixtureState()`) is exposed for the test runner.
+#### Realism Notes
+
+The checkout page includes a fake CAPTCHA checkbox (`#captcha-checkbox`) that must be checked before the order can be placed. This exercises the agent's ability to handle simple verification steps without relying on an external CAPTCHA service.
+
+### TaskFlow (`src/e2e/fixtures/taskflow/`)
+
+A Kanban-style task manager for testing CRUD, status changes, and multi-view navigation.
+
+#### Pages
+
+| Path | Purpose |
+|------|---------|
+| `/` | Home / welcome. |
+| `/board` | Kanban board with Todo / In Progress / Done columns. |
+| `/task/new` | Create-task form. |
+| `/task/:id` | Task detail. |
+| `/task/:id/edit` | Edit-task form. |
+
+#### State Management
+
+- `taskflow:tasks` — array of `{ id, title, description, status, priority, createdAt }`.
+
+### DevForum (`src/e2e/fixtures/devforum/`)
+
+A developer forum for testing content browsing, search, authentication, and form submission.
+
+#### Pages
+
+| Path | Purpose |
+|------|---------|
+| `/` | Latest posts with search and category filter. |
+| `/category/:category` | Filtered category view. |
+| `/post/:id` | Post detail with comments. |
+| `/new` | New post form (requires login). |
+| `/login` | Fake username/password login form. |
+
+#### State Management
+
+- `devforum:posts` — array of `{ id, title, category, author, body, createdAt, comments: [{ author, body }] }`.
+- `devforum:user` — `{ username }` for the currently logged-in session.
+
+#### Realism Notes
+
+Creating a new post requires logging in through a fake auth form (`/login`). Any non-empty username/password is accepted. The author field on the new-post form is auto-populated from the logged-in user.
 
 ## Task Definitions
 
@@ -103,16 +136,20 @@ interface Task {
 }
 ```
 
-### Initial Task Suite
+### Task Suite
 
-| ID | Intent | Expected Outcome |
-|----|--------|------------------|
-| `search-add-to-cart` | "Search for wireless headphones and add them to your cart." | Cart contains `p1` with quantity 1. |
-| `cheapest-in-category` | "Find the cheapest product in the audio category and add it to your cart." | Cart contains `p1` (cheapest audio item at $129; `p4` is $159). |
-| `complete-checkout` | "Add one USB-C Hub to your cart and complete checkout using name 'Test User', address '123 Test St', card '4111 1111 1111 1111'." | An order is created in `localStorage`, confirmation page shows order number. |
-| `out-of-stock-recovery` | "Try to add the Monitor Arm to your cart. If it is out of stock, add the Webcam 4K instead." | Cart contains `p4` and not `p5`. |
+| ID | Fixture | Intent | Expected Outcome |
+|----|---------|--------|------------------|
+| `search-add-to-cart` | OneStopShop | Type "wireless headphones" into #search-input, then click #add-to-cart-p1. | Cart contains `p1` with quantity 1. |
+| `cheapest-in-category` | OneStopShop | Type "audio" into #category-filter, type "price-asc" into #sort-order, then click #add-to-cart-p1. | Cart contains `p1` with quantity 1. |
+| `complete-checkout` | OneStopShop | Add one USB-C Hub to cart, fill checkout form, check #captcha-checkbox, and place order. | An order is created in `localStorage`, cart is empty. |
+| `out-of-stock-recovery` | OneStopShop | Click #add-to-cart-p5 (disabled/out of stock), then click #add-to-cart-p4. | Cart contains `p4` and not `p5`. |
+| `taskflow-create-task` | TaskFlow | Click #new-task-btn, type title/description, and click #save-task-btn. | A new task with the given title exists in `taskflow:tasks`. |
+| `taskflow-edit-status` | TaskFlow | Starting at `/taskflow/#/task/t2/edit`, click #status-done and save. | Task `t2` status is "done". |
+| `devforum-search-open` | DevForum | Type "async" into #search-input, click #post-link-post-2. | URL includes `/post/post-2`. |
+| `devforum-create-post` | DevForum | Click #new-post-btn, log in with fake credentials, fill the new-post form, and submit. | A new post with the given title and author exists in `devforum:posts`. |
 
-Tasks can be templated to produce variations (e.g., different products, addresses) by replacing placeholders in `intent` and `evaluate`.
+Tasks are evaluated by inspecting final page state and `localStorage`, not by matching an expected action sequence. They can be templated to produce variations (e.g., different products, addresses, titles) by replacing placeholders in `intent` and `evaluate`.
 
 ## Test Orchestration
 
@@ -209,22 +246,25 @@ src/e2e/
 ├── setup-host.ts             # Native host setup (existing)
 ├── evaluator.ts              # Evaluation helpers and task runner
 ├── fixtures/
-│   └── onestopshop/
+│   ├── onestopshop/
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   └── app.js            # Router, catalog, cart, checkout logic
+│   ├── taskflow/
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   └── app.js            # Kanban board, task CRUD
+│   └── devforum/
 │       ├── index.html
-│       ├── products.html
-│       ├── product.html
-│       ├── cart.html
-│       ├── checkout.html
-│       ├── order.html
 │       ├── styles.css
-│       └── app.js            # Router, catalog, cart, checkout logic
+│       └── app.js            # Forum posts, search, comments
 └── tasks/
     └── index.ts              # Task definitions and evaluations
 ```
 
 ## Success Criteria for This Redesign
 
-1. The E2E suite runs at least 4 distinct realistic tasks.
+1. The E2E suite runs realistic tasks across at least three distinct fixture sites.
 2. Each task is evaluated by final page state, not by expected action sequence.
 3. The side panel is opened through `chrome.sidePanel.open()` on the target tab, not loaded as a standalone page.
 4. A test report is printed with per-task pass/fail, completion summary, and failure reasons.

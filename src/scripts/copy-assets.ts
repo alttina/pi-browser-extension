@@ -28,4 +28,8 @@ function copyDir(src: string, dst: string) {
   }
 }
 
-copyDir('src/e2e/fixtures/onestopshop', 'dist/e2e/fixtures/onestopshop');
+for (const fixture of readdirSync('src/e2e/fixtures', { withFileTypes: true })) {
+  if (fixture.isDirectory()) {
+    copyDir(`src/e2e/fixtures/${fixture.name}`, `dist/e2e/fixtures/${fixture.name}`);
+  }
+}
