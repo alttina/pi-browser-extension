@@ -9,6 +9,7 @@ import {
   ScrollSchema,
   ClickSchema,
   TypeSchema,
+  NavigateSchema,
   GetTextSchema,
   FindElementSchema,
   type BrowserToolName,
@@ -18,17 +19,13 @@ import type { Message, ToolCallMessage, ToolResultMessage, DoneMessage } from '.
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const BROWSER_SYSTEM_PROMPT = `You are a browser automation assistant controlling the active Chrome tab.
-The tab currently shows a small mock e-commerce site called OneStopShop. Operate ONLY on the current page. Do NOT navigate to any external site such as Amazon, Google, or any real store.
-
 Use the provided browser_* tools to complete the user's request.
 
 Rules:
 - Start by taking a screenshot or reading the page to understand the current state.
-- Valid CSS selectors use IDs (e.g. #search-input, #add-to-cart-p1), classes (e.g. .btn), or data attributes (e.g. [data-product-id='p1']). Do NOT use :contains(), :has(), XPath, or any non-standard pseudo-selectors.
-- When you need to click or type, first use browser_find_element with a natural-language description to verify the element exists and obtain a valid CSS selector. Only click or type selectors that were returned by browser_find_element.
-- Each product card has data-product-id='p1' (etc.). The Add to cart button for a product has id='add-to-cart-p1' (etc.).
-- Use the search box (#search-input), category filter (#category-filter), and sort order (#sort-order) on the products page.
-- To complete checkout, add the item, click the Cart link, click Proceed to checkout, fill the form fields (#full-name, #address, #card), and click Place order.
+- Use browser_find_element to locate elements when you are unsure of the exact selector.
+- Prefer robust CSS selectors such as IDs, data attributes, or stable class names.
+- Do not navigate to external sites unless explicitly asked.
 - Once the requested action is finished, respond briefly and stop.`;
 
 export type SendToExtension = (toolCall: ToolCallMessage) => Promise<ToolResultMessage>;
@@ -55,23 +52,28 @@ export class AgentHost {
       this.defineTool('browser_scroll', ScrollSchema, 'Scroll the page or a specific element into view.', 'Use this when content is below the fold or when targeting an element that is not visible.'),
       this.defineTool('browser_click', ClickSchema, 'Click an element on the page.', 'Use this to press buttons, follow links, or select options.'),
       this.defineTool('browser_type', TypeSchema, 'Type text into an input or textarea.', 'Use this to fill forms or search boxes.'),
+      this.defineTool('browser_navigate', NavigateSchema, 'Navigate the current tab to a URL.', 'Use this to open a new page when the user asks.'),
       this.defineTool('browser_get_text', GetTextSchema, 'Get the visible text content of the page or an element.', 'Use this to read page content or extract specific text.'),
       this.defineTool('browser_find_element', FindElementSchema, 'Find interactive elements or verify a candidate selector.', 'Use this to locate buttons, links, inputs, or confirm a selector exists.'),
     ];
   }
 
   async createSession(tools: ToolDefinition[]): Promise<SessionLike> {
-    const { session } = await createAgentSession({
+    const sessionOptions: Record<string, unknown> = {
       noTools: 'builtin',
       customTools: tools,
-      thinkingLevel: 'off',
       resourceLoader: new DefaultResourceLoader({
         cwd: PROJECT_ROOT,
         agentDir: getAgentDir(),
         noExtensions: true,
         appendSystemPrompt: [BROWSER_SYSTEM_PROMPT],
       }),
-    });
+    };
+    const thinkingLevel = process.env.PI_THINKING_LEVEL;
+    if (thinkingLevel) {
+      sessionOptions.thinkingLevel = thinkingLevel;
+    }
+    const { session } = await createAgentSession(sessionOptions as any);
     return session;
   }
 

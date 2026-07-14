@@ -5,7 +5,7 @@ import { join, extname } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import { setupHost, EXTENSION_ID } from './setup-host.js';
 import { TASKS } from './tasks/index.js';
-import { runTask, type TaskRunner } from './evaluator.js';
+import { runTask, captureChatState, type TaskRunner } from './evaluator.js';
 
 const EXTENSION_PATH = resolve('dist/extension');
 const FIXTURE_ROOT = resolve('dist/e2e/fixtures/onestopshop');
@@ -119,10 +119,12 @@ async function run() {
 
     for (const task of TASKS) {
       console.log(`\nRunning task: ${task.id}`);
-      const { result, durationMs } = await runTask(runner, task);
+      const { result, chat, durationMs } = await runTask(runner, task);
       results.push({ id: task.id, success: result.success, reason: result.reason, durationMs });
       const status = result.success ? 'PASS' : 'FAIL';
       console.log(`[${status}] ${task.id} (${durationMs}ms) ${result.reason ? '- ' + result.reason : ''}`);
+      console.log(`  Completion: ${chat.completion || '(none)'}`);
+      console.log(`  Tools: ${chat.toolCalls.map((t) => t.name).join(' → ') || '(none)'}`);
 
       if (!result.success) {
         const ts = Date.now();

@@ -56,5 +56,18 @@ export async function runTask(runner: TaskRunner, task: Task): Promise<{ result:
   }
 
   const result = await task.evaluate(runner.targetPage, chat);
+
+  if (result.success && task.requiredTools && task.requiredTools.length > 0) {
+    const usedToolNames = new Set(chat.toolCalls.map((t) => t.name));
+    const missing = task.requiredTools.filter((name) => !usedToolNames.has(name));
+    if (missing.length > 0) {
+      return {
+        result: { success: false, reason: `State passed but required tools were not used: ${missing.join(', ')}` },
+        chat,
+        durationMs,
+      };
+    }
+  }
+
   return { result, chat, durationMs };
 }

@@ -23,6 +23,7 @@ export interface Task {
   intent: string;
   startUrl: string;
   maxDurationMs: number;
+  requiredTools?: string[];
   evaluate: (page: Page, chat: ChatState) => Promise<TaskResult>;
 }
 
@@ -52,6 +53,7 @@ export const TASKS: Task[] = [
     intent: 'Type "wireless headphones" into #search-input, then click #add-to-cart-p1.',
     startUrl: '#/products',
     maxDurationMs: 45000,
+    requiredTools: ['browser_type', 'browser_click'],
     async evaluate(page) {
       const cart = await getCart(page);
       const ok = cart.length === 1 && cart[0].productId === 'p1' && cart[0].quantity === 1;
@@ -63,6 +65,7 @@ export const TASKS: Task[] = [
     intent: 'Type "audio" into #category-filter, type "price-asc" into #sort-order, then click #add-to-cart-p1.',
     startUrl: '#/products',
     maxDurationMs: 45000,
+    requiredTools: ['browser_type', 'browser_click'],
     async evaluate(page) {
       const cart = await getCart(page);
       const ok = cart.length === 1 && cart[0].productId === 'p1' && cart[0].quantity === 1;
@@ -74,6 +77,7 @@ export const TASKS: Task[] = [
     intent: 'Click #add-to-cart-p3, click the Cart link, click #checkout-btn, type "Test User" into #full-name, type "123 Test St" into #address, type "4111 1111 1111 1111" into #card, and click the Place order button.',
     startUrl: '#/products',
     maxDurationMs: 90000,
+    requiredTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const orders = await getOrders(page);
       const cart = await getCart(page);
@@ -86,6 +90,7 @@ export const TASKS: Task[] = [
     intent: 'Click #add-to-cart-p5 (it is disabled/out of stock), then click #add-to-cart-p4.',
     startUrl: '#/products',
     maxDurationMs: 45000,
+    requiredTools: ['browser_click'],
     async evaluate(page) {
       const cart = await getCart(page);
       const hasWebcam = cart.some((item) => item.productId === 'p4');
