@@ -61,9 +61,30 @@ async function getServiceWorker(context: BrowserContext): Promise<Worker> {
   if (existing) return existing;
   const [worker] = await Promise.all([
     context.waitForEvent('serviceworker'),
-    context.newPage(),
+    // Opening a temporary tab encourages Chrome to start the extension service worker.
+    context.newPage().then(async (p) => {
+      await p.goto('about:blank');
+      return p;
+    }),
   ]);
   return worker;
+}
+
+async function closeBlankTabs(context: BrowserContext, keepPages: Page[]) {
+  const keepUrls = new Set(keepPages.map((p) => p.url()));
+  for (const page of context.pages()) {
+    if (page.url() === 'about:blank' && !keepPages.includes(page)) {
+      await page.close().catch(() => {});
+    }
+  }
+}
+
+async function openRealSidePanel(targetPage: Page) {
+  // Use the extension's keyboard shortcut to open the actual Chrome side panel.
+  // The shortcut is defined in manifest.json as _execute_side_panel_action.
+  const isMac = process.platform === 'darwin';
+  await targetPage.bringToFront();
+  await targetPage.keyboard.press(isMac ? 'Meta+Shift+Y' : 'Control+Shift+Y');
 }
 
 async function run() {
@@ -91,14 +112,19 @@ async function run() {
     const targetPage: Page = await context.newPage();
     await targetPage.goto(`${fixtureUrl}onestopshop/`);
 
-    // Load the side panel UI in a separate page so we can drive it without needing a
-    // toolbar click. The extension's background script will connect the native host
-    // on the first user message.
+    // Open the real Chrome side panel on the target tab so the user sees it during tests.
+    await openRealSidePanel(targetPage);
+
+    // Load the side panel UI in a separate page so we can drive it and read its DOM
+    // without relying on Playwright being able to access the actual side panel surface.
     const sidePanelPage: Page = await context.newPage();
     await sidePanelPage.goto(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
     await sidePanelPage.waitForSelector('#input');
     await sidePanelPage.waitForSelector('#sendBtn');
     console.log('Side panel ready');
+
+    // Close the helper blank tabs; keep only the fixture tab and the side-panel page.
+    await closeBlankTabs(context, [targetPage, sidePanelPage]);
 
     // Keep the target fixture tab active so the background script routes tool calls
     // to the correct tab.

@@ -32,6 +32,15 @@
   "action": {
     "default_title": "Open Pi Browser Agent"
   },
+  "commands": {
+    "_execute_side_panel_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Open the Pi Browser Agent side panel"
+    }
+  },
   "icons": {
     "16": "icons/icon16.svg",
     "48": "icons/icon48.svg",
