@@ -12,20 +12,14 @@ export async function captureChatState(sidePanelPage: Page): Promise<ChatState> 
     const assistantMessages = Array.from(chat.querySelectorAll('.message.agent > .bubble > .bubble-text')).map(
       (el) => el.textContent || ''
     );
-    const toolCalls = Array.from(chat.querySelectorAll('.agent-card')).map((card) => {
-      const name = card.querySelector('.tool-name')?.textContent || '';
-      const id = card.getAttribute('data-tool-id') || '';
-      const args: Record<string, unknown> = {};
-      card.querySelectorAll('.tool-param').forEach((row) => {
-        const key = row.querySelector('.param-key')?.textContent || '';
-        const value = row.querySelector('.param-value')?.textContent || '';
-        if (key) {
-          try { args[key] = JSON.parse(value); }
-          catch { args[key] = value; }
-        }
-      });
-      return { id, name, args };
-    });
+
+    let toolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+    const historyEl = chat.querySelector('#tool-history');
+    if (historyEl?.textContent) {
+      try { toolCalls = JSON.parse(historyEl.textContent); }
+      catch { toolCalls = []; }
+    }
+
     const completion = chat.querySelector('.completion-summary')?.textContent || undefined;
 
     return { userMessages, assistantMessages, toolCalls, completion };

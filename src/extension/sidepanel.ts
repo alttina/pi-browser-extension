@@ -1,42 +1,43 @@
-import type { Message, ToolCallMessage, ToolResultMessage, DoneMessage, StatusMessage, AgentStatus } from '../shared/messages.js';
+import type { Message, DoneMessage, StatusMessage, AgentStatus } from '../shared/messages.js';
 
 const chat = document.getElementById('chat') as HTMLDivElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement;
 
-const statusPanel = document.getElementById('agentStatusPanel') as HTMLDivElement;
-const statusMain = document.getElementById('statusMain') as HTMLDivElement;
-const statusLabel = document.getElementById('statusLabel') as HTMLSpanElement;
+const statusEl = document.getElementById('agentStatus') as HTMLDivElement;
+
+interface ToolHistoryEntry {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  elapsedMs?: number;
+}
+
+const toolHistory: ToolHistoryEntry[] = [];
+const statusTitle = document.getElementById('statusTitle') as HTMLSpanElement;
+const statusStep = document.getElementById('statusStep') as HTMLSpanElement;
 const statusTools = document.getElementById('statusTools') as HTMLSpanElement;
 const statusTokens = document.getElementById('statusTokens') as HTMLSpanElement;
-const statusStep = document.getElementById('statusStep') as HTMLSpanElement;
-
-const statusLabels: Record<AgentStatus, string> = {
-  thinking: 'Thinking',
-  writing: 'Writing',
-  screenshotting: 'Screenshotting',
-  working: 'Working',
-};
 
 const stepLabels: Record<AgentStatus, string> = {
   thinking: 'Thinking…',
   writing: 'Writing…',
-  screenshotting: 'Taking screenshot…',
-  working: 'Running tool…',
+  screenshotting: 'Screenshotting…',
+  working: 'Working…',
 };
 
 function updateStatus(msg: StatusMessage) {
-  statusPanel.classList.add('status-working');
-  statusPanel.classList.remove('status-done');
-  statusLabel.textContent = statusLabels[msg.state];
-  statusTools.textContent = `Tools: ${msg.toolCount}`;
+  statusEl.classList.add('status-working');
+  statusEl.classList.remove('status-done');
+  statusTitle.textContent = 'Working';
+  statusStep.textContent = stepLabels[msg.state];
+  statusTools.textContent = `${msg.toolCount} tool${msg.toolCount === 1 ? '' : 's'}`;
   if (msg.totalTokens && msg.totalTokens > 0) {
     statusTokens.classList.remove('hidden');
-    statusTokens.textContent = `Tokens: ${msg.totalTokens.toLocaleString()}`;
+    statusTokens.textContent = `${msg.totalTokens.toLocaleString()} tokens`;
   } else {
     statusTokens.classList.add('hidden');
   }
-  statusStep.textContent = stepLabels[msg.state];
 }
 
 function formatDuration(totalMs: number): string {
@@ -52,152 +53,67 @@ function formatDuration(totalMs: number): string {
 }
 
 function setDoneStatus(toolCount: number, totalMs: number, totalTokens?: number) {
-  statusPanel.classList.remove('status-working');
-  statusPanel.classList.add('status-done');
-  statusLabel.textContent = 'Done';
-  statusTools.textContent = `Tools: ${toolCount}`;
+  statusEl.classList.remove('status-working');
+  statusEl.classList.add('status-done');
+  statusTitle.textContent = 'Done';
+  statusStep.textContent = `Worked for ${formatDuration(totalMs)}`;
+  statusTools.textContent = `${toolCount} tool${toolCount === 1 ? '' : 's'}`;
   if (totalTokens && totalTokens > 0) {
     statusTokens.classList.remove('hidden');
-    statusTokens.textContent = `Tokens: ${totalTokens.toLocaleString()}`;
+    statusTokens.textContent = `${totalTokens.toLocaleString()} tokens`;
   } else {
     statusTokens.classList.add('hidden');
   }
-  statusStep.textContent = `Worked for ${formatDuration(totalMs)}`;
 }
 
 function resetStatus() {
-  statusPanel.classList.remove('status-working', 'status-done');
-  statusLabel.textContent = 'Ready';
-  statusTools.textContent = 'Tools: 0';
-  statusTokens.classList.add('hidden');
+  statusEl.classList.remove('status-working', 'status-done');
+  statusTitle.textContent = 'Ready';
   statusStep.textContent = '—';
+  statusTools.textContent = '0 tools';
+  statusTokens.classList.add('hidden');
 }
 
 function appendUser(text: string) {
+  chat.innerHTML = '';
   const row = document.createElement('div');
   row.className = 'message user';
-  row.innerHTML = `<div class="bubble"><div class="bubble-text">${escapeHtml(text)}</div><div class="meta">${timeNow()}</div></div>`;
+  row.innerHTML = `<div class="bubble"><div class="bubble-text">${escapeHtml(text)}</div></div>`;
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
 }
 
-function appendAgentText(text: string) {
+function appendSummary(summary: string) {
   const row = document.createElement('div');
-  row.className = 'message agent';
-  row.innerHTML = `<div class="bubble"><div class="bubble-text">${escapeHtml(text)}</div><div class="meta">${timeNow()}</div></div>`;
+  row.className = 'message agent summary';
+  row.innerHTML = `<div class="bubble completion-summary"><div class="bubble-text">${escapeHtml(summary).replace(/\n/g, '<br>')}</div></div>`;
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
 }
 
-const toolCards = new Map<string, HTMLElement>();
-const toolHistory: { id: string; name: string; status: 'working' | 'done'; elapsedMs?: number }[] = [];
-
-function appendToolCall(msg: ToolCallMessage) {
+function appendError(message: string) {
   const row = document.createElement('div');
-  row.className = 'message agent';
-  row.innerHTML = `<div class="bubble agent-bubble">
-    <div class="agent-card" data-tool-id="${msg.id}">
-      <div class="tool-header"><div class="tool-name">${escapeHtml(msg.name)}</div><div class="tool-status">working</div></div>
-      <div class="tool-body">${formatArgs(msg.args)}</div>
-    </div>
-  </div>`;
+  row.className = 'message agent error';
+  row.innerHTML = `<div class="bubble"><div class="bubble-text">Error: ${escapeHtml(message)}</div></div>`;
   chat.appendChild(row);
-  toolCards.set(msg.id, row.querySelector('.agent-card') as HTMLElement);
-  toolHistory.push({ id: msg.id, name: msg.name, status: 'working' });
   chat.scrollTop = chat.scrollHeight;
-}
-
-function updateToolResult(msg: ToolResultMessage) {
-  const card = toolCards.get(msg.id);
-  if (!card) return;
-  const status = card.querySelector('.tool-status') as HTMLElement;
-  status.textContent = `done ${msg.elapsedMs}ms`;
-  const entry = toolHistory.find((t) => t.id === msg.id);
-  if (entry) {
-    entry.status = 'done';
-    entry.elapsedMs = msg.elapsedMs;
-  }
 }
 
 function appendDone(msg: DoneMessage) {
   setDoneStatus(msg.toolCount, msg.totalMs, msg.totalTokens);
+  appendSummary(msg.summary);
 
-  const row = document.createElement('div');
-  row.className = 'message agent';
-  const trajectory = toolHistory.map((t) => escapeHtml(t.name)).join(' → ');
-  const detailsId = `completion-details-${Date.now()}`;
-  const tokenText = msg.totalTokens ? ` · ${msg.totalTokens.toLocaleString()} tokens` : '';
-  row.innerHTML = `
-    <div class="completion-card">
-      <div class="completion-header">
-        <div class="completion-badge">Done</div>
-        <div class="completion-meta-inline">${msg.toolCount} tools${tokenText} · ${formatDuration(msg.totalMs)}</div>
-      </div>
-      <div class="completion-summary">${escapeHtml(msg.summary)}</div>
-      <div class="completion-tools">
-        <button class="completion-toggle" aria-expanded="false" aria-controls="${detailsId}">
-          Show tool trajectory
-        </button>
-        <div id="${detailsId}" class="completion-details hidden">
-          <div class="completion-trajectory">${trajectory || 'No tools used'}</div>
-          <ul class="completion-tool-list">
-            ${toolHistory.map((t) => `
-              <li>
-                <span class="tool-name-small">${escapeHtml(t.name)}</span>
-                <span class="tool-status-small">${t.status === 'done' && t.elapsedMs !== undefined ? `${t.elapsedMs}ms` : t.status}</span>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      </div>
-      <div class="completion-actions">
-        <button class="completion-action-btn copy-summary-btn">Copy summary</button>
-        <button class="completion-action-btn new-task-btn">New task</button>
-      </div>
-    </div>
-  `;
-  chat.appendChild(row);
+  const history = document.createElement('div');
+  history.id = 'tool-history';
+  history.className = 'hidden';
+  history.textContent = JSON.stringify(toolHistory);
+  chat.appendChild(history);
 
-  const toggle = row.querySelector('.completion-toggle') as HTMLButtonElement;
-  const details = row.querySelector(`#${detailsId}`) as HTMLDivElement;
-  toggle.addEventListener('click', () => {
-    const expanded = details.classList.toggle('hidden');
-    toggle.textContent = expanded ? 'Show tool trajectory' : 'Hide tool trajectory';
-    toggle.setAttribute('aria-expanded', String(!expanded));
-  });
-
-  const copyBtn = row.querySelector('.copy-summary-btn') as HTMLButtonElement;
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(msg.summary).then(() => {
-      copyBtn.textContent = 'Copied';
-      setTimeout(() => (copyBtn.textContent = 'Copy summary'), 1200);
-    });
-  });
-
-  const newTaskBtn = row.querySelector('.new-task-btn') as HTMLButtonElement;
-  newTaskBtn.addEventListener('click', () => {
-    input.value = '';
-    input.focus();
-    input.scrollIntoView({ behavior: 'smooth' });
-  });
-
-  chat.scrollTop = chat.scrollHeight;
   toolHistory.length = 0;
-  toolCards.clear();
 }
 
 function escapeHtml(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-}
-
-function formatArgs(args: Record<string, unknown>) {
-  return Object.entries(args)
-    .map(([k, v]) => `<div class="tool-param"><span class="param-key">${escapeHtml(k)}</span><span class="param-value">${escapeHtml(JSON.stringify(v))}</span></div>`)
-    .join('');
-}
-
-function timeNow() {
-  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function send() {
@@ -206,10 +122,9 @@ function send() {
   appendUser(text);
   input.value = '';
   toolHistory.length = 0;
-  toolCards.clear();
   resetStatus();
-  statusPanel.classList.add('status-working');
-  statusLabel.textContent = 'Working';
+  statusEl.classList.add('status-working');
+  statusTitle.textContent = 'Working';
   statusStep.textContent = 'Starting…';
   chrome.runtime.sendMessage({ type: 'user', text });
 }
@@ -223,12 +138,14 @@ input.addEventListener('keydown', (e) => {
 });
 
 chrome.runtime.onMessage.addListener((msg: Message) => {
-  if (msg.type === 'tool_call' && msg.ui === true) appendToolCall(msg);
-  else if (msg.type === 'tool_result' && msg.ui === true) updateToolResult(msg);
-  else if (msg.type === 'status') updateStatus(msg);
+  if (msg.type === 'tool_call' && msg.ui === true) {
+    toolHistory.push({ id: msg.id, name: msg.name, args: msg.args });
+  } else if (msg.type === 'tool_result' && msg.ui === true) {
+    const entry = toolHistory.find((t) => t.id === msg.id);
+    if (entry) entry.elapsedMs = msg.elapsedMs;
+  } else if (msg.type === 'status') updateStatus(msg);
   else if (msg.type === 'done') appendDone(msg);
-  else if (msg.type === 'assistant') appendAgentText(msg.text);
-  else if (msg.type === 'error') appendAgentText(`Error: ${msg.message}`);
+  else if (msg.type === 'error') appendError(msg.message);
 });
 
 interface Settings {
