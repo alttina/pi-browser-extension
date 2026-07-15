@@ -52,6 +52,11 @@ export interface ClearChatMessage {
   type: 'clear_chat';
 }
 
+export interface ConfigMessage {
+  type: 'config';
+  model?: string;
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
@@ -60,4 +65,5 @@ export type Message =
   | DoneMessage
   | ErrorMessage
   | StatusMessage
-  | ClearChatMessage;
+  | ClearChatMessage
+  | ConfigMessage;

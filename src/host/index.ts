@@ -34,6 +34,13 @@ async function main() {
   const session = await host.createSession(tools);
   host.bindSession(session);
 
+  const modelId = host.getModelId();
+  if (modelId) {
+    const configMsg: Message = { type: 'config', model: modelId };
+    logger?.log('out', configMsg);
+    process.stdout.write(encodeMessage(configMsg));
+  }
+
   let buffer = Buffer.alloc(0) as Buffer;
   process.stdin.on('data', (chunk: Buffer) => {
     buffer = Buffer.concat([buffer, chunk]) as unknown as Buffer;

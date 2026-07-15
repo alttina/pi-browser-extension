@@ -30,7 +30,7 @@ Rules:
 
 export type SendToExtension = (toolCall: ToolCallMessage) => Promise<ToolResultMessage>;
 
-export type SessionLike = Pick<AgentSession, 'subscribe' | 'sendUserMessage' | 'getLastAssistantText' | 'dispose'>;
+export type SessionLike = Pick<AgentSession, 'subscribe' | 'sendUserMessage' | 'getLastAssistantText' | 'dispose' | 'model'>;
 
 export class AgentHost {
   private session?: SessionLike;
@@ -97,6 +97,10 @@ export class AgentHost {
   dispose() {
     this.session?.dispose();
     this.session = undefined;
+  }
+
+  getModelId(): string | undefined {
+    return this.session?.model?.id;
   }
 
   private defineTool<T extends TSchema>(

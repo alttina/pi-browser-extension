@@ -224,6 +224,7 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   } else if (msg.type === 'status') updateStatus(msg);
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'error') appendError(msg.message);
+  else if (msg.type === 'config' && msg.model) updateModelBadge(msg.model);
 });
 
 interface Settings {
@@ -334,9 +335,9 @@ function formatModelName(model: string): string {
   return compact || model;
 }
 
-function updateModelBadge(settings: Settings) {
+function updateModelBadge(model: string) {
   if (modelBadge) {
-    modelBadge.textContent = formatModelName(settings.model);
+    modelBadge.textContent = formatModelName(model);
   }
 }
 
@@ -344,13 +345,13 @@ async function loadSettings() {
   const stored = await chrome.storage.local.get(DEFAULTS as unknown as Record<string, unknown>);
   const settings = stored as unknown as Settings;
   applyToForm(settings);
-  updateModelBadge(settings);
+  updateModelBadge(settings.model);
 }
 
 async function saveSettings() {
   const settings = readFromForm();
   await chrome.storage.local.set(settings as unknown as Record<string, unknown>);
-  updateModelBadge(settings);
+  updateModelBadge(settings.model);
   const saveBtn = getSettingEl<HTMLButtonElement>('saveBtn');
   const original = saveBtn.textContent;
   saveBtn.textContent = 'Saved';

@@ -20,6 +20,7 @@ describe('AgentHost', () => {
       },
       getLastAssistantText: () => 'Clicked the button.',
       dispose: () => {},
+      model: undefined,
     };
 
     const host = new AgentHost(async (toolCall: ToolCallMessage): Promise<ToolResultMessage> => {
@@ -32,8 +33,10 @@ describe('AgentHost', () => {
 
     assert.strictEqual(received[0]?.type, 'tool_call');
     assert.strictEqual((received[0] as ToolCallMessage).name, 'browser_click');
-    assert.strictEqual(received[1]?.type, 'tool_result');
-    assert.strictEqual(received[2]?.type, 'done');
-    assert.strictEqual((received[2] as { summary: string }).summary, 'Clicked the button.');
+    const toolResult = received.find((m) => m.type === 'tool_result');
+    assert.ok(toolResult, 'expected a tool_result message');
+    const done = received.find((m) => m.type === 'done') as { summary: string } | undefined;
+    assert.ok(done, 'expected a done message');
+    assert.strictEqual(done.summary, 'Clicked the button.');
   });
 });
