@@ -21,13 +21,28 @@ function connectPort() {
     if (msg.type === 'tool_call' && !msg.ui) {
       const toolCallMsg = msg as Extract<Message, { type: 'tool_call' }>;
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const tabId = tabs[0]?.id;
+        const tab = tabs[0];
+        const tabId = tab?.id;
         if (!tabId) {
           const error = 'No active tab found to execute browser tool.';
           console.error('[background]', error);
           if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { error }, elapsedMs: 0 });
           return;
         }
+
+        // Screenshots do not need the content script; capture directly in the background.
+        if (toolCallMsg.name === 'browser_screenshot') {
+          const startMs = Date.now();
+          const windowId = tab.windowId;
+          chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).then((dataUrl) => {
+            if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { screenshot: dataUrl }, elapsedMs: Date.now() - startMs });
+          }).catch((err: Error) => {
+            console.error('[background] screenshot failed:', err.message);
+            if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { error: err.message }, elapsedMs: Date.now() - startMs });
+          });
+          return;
+        }
+
         function forwardToolCall(attemptInject = true) {
           chrome.tabs.sendMessage(tabId!, toolCallMsg, (res) => {
             const lastError = chrome.runtime.lastError?.message;
