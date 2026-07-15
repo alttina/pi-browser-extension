@@ -86,7 +86,7 @@ function appendUser(text: string) {
 function appendSummary(summary: string) {
   const row = document.createElement('div');
   row.className = 'message agent summary';
-  row.innerHTML = `<div class="bubble completion-summary"><div class="bubble-text">${escapeHtml(summary).replace(/\n/g, '<br>')}</div></div>`;
+  row.innerHTML = `<div class="bubble completion-summary"><div class="bubble-text markdown">${renderMarkdown(summary)}</div></div>`;
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
 }
@@ -116,6 +116,66 @@ function escapeHtml(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 }
 
+function renderInlineMarkdown(text: string): string {
+  return text
+    .replace(/``([^`]+)``/g, '<code>$1</code>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/_([^_]+)_/g, '<em>$1</em>');
+}
+
+function listCloseTag(tag: 'ul' | 'ol'): string {
+  return tag === 'ul' ? '</ul>' : '</ol>';
+}
+
+function renderMarkdown(s: string): string {
+  const escaped = escapeHtml(s);
+  const lines = escaped.split('\n');
+  const out: string[] = [];
+  let inList: 'ul' | 'ol' | null = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (inList) {
+        out.push(listCloseTag(inList));
+        inList = null;
+      }
+      continue;
+    }
+
+    const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+    const ulMatch = line.match(/^[-*]\s+(.*)$/);
+
+    if (olMatch) {
+      if (inList !== 'ol') {
+        if (inList) out.push(listCloseTag(inList));
+        out.push('<ol>');
+        inList = 'ol';
+      }
+      out.push(`<li>${renderInlineMarkdown(olMatch[2])}</li>`);
+    } else if (ulMatch) {
+      if (inList !== 'ul') {
+        if (inList) out.push(listCloseTag(inList));
+        out.push('<ul>');
+        inList = 'ul';
+      }
+      out.push(`<li>${renderInlineMarkdown(ulMatch[1])}</li>`);
+    } else {
+      if (inList) {
+        out.push(listCloseTag(inList));
+        inList = null;
+      }
+      out.push(`<p>${renderInlineMarkdown(line)}</p>`);
+    }
+  }
+
+  if (inList) out.push(listCloseTag(inList));
+  return out.join('');
+}
+
 function send() {
   const text = input.value.trim();
   if (!text) return;
@@ -137,8 +197,17 @@ input.addEventListener('keydown', (e) => {
   }
 });
 
+function clearChat() {
+  chat.innerHTML = '';
+  toolHistory.length = 0;
+  resetStatus();
+  input.value = '';
+}
+
 chrome.runtime.onMessage.addListener((msg: Message) => {
-  if (msg.type === 'tool_call' && msg.ui === true) {
+  if (msg.type === 'clear_chat') {
+    clearChat();
+  } else if (msg.type === 'tool_call' && msg.ui === true) {
     toolHistory.push({ id: msg.id, name: msg.name, args: msg.args });
   } else if (msg.type === 'tool_result' && msg.ui === true) {
     const entry = toolHistory.find((t) => t.id === msg.id);
@@ -181,6 +250,10 @@ const settingsBtn = document.getElementById('settingsBtn') as HTMLButtonElement;
 const closeSettingsBtn = document.getElementById('closeSettingsBtn') as HTMLButtonElement;
 const statusBadge = document.getElementById('statusBadge') as HTMLDivElement;
 const newChatBtn = document.getElementById('newChatBtn') as HTMLButtonElement;
+newChatBtn.addEventListener('click', () => {
+  clearChat();
+  input.focus();
+});
 
 function showSettings() {
   chatView.classList.add('hidden');

@@ -143,6 +143,11 @@ async function run() {
       targetPage,
       sidePanelPage,
       baseUrl: fixtureUrl.replace(/\/$/, ''),
+      async clearChat() {
+        await sidePanelPage.evaluate(() => {
+          chrome.runtime.sendMessage({ type: 'clear_chat' });
+        });
+      },
       async sendIntent(intent: string) {
         await sidePanelPage.evaluate((text: string) => {
           const input = document.getElementById('input') as HTMLTextAreaElement;

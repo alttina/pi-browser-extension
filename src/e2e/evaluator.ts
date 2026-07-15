@@ -30,6 +30,7 @@ export interface TaskRunner {
   targetPage: Page;
   sidePanelPage: Page;
   baseUrl: string;
+  clearChat(): Promise<void>;
   sendIntent(intent: string): Promise<void>;
   waitForCompletion(options: { timeoutMs: number }): Promise<boolean>;
 }
@@ -41,6 +42,7 @@ export async function runTask(runner: TaskRunner, task: Task): Promise<{ result:
   await runner.targetPage.waitForFunction(() => typeof window.__resetFixtureState === 'function');
   await runner.targetPage.evaluate(() => window.__resetFixtureState());
 
+  await runner.clearChat();
   await runner.sendIntent(task.intent);
   const completed = await runner.waitForCompletion({ timeoutMs: task.maxDurationMs });
 

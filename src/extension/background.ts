@@ -48,6 +48,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (msg.type === 'clear_chat') {
+    chrome.runtime.sendMessage(msg).catch(() => {});
+    sendResponse({ ok: true });
+    return false;
+  }
   if (msg.type === 'capture_tab') {
     chrome.tabs.captureVisibleTab({ format: 'png' }).then((dataUrl) => {
       sendResponse({ screenshot: dataUrl });

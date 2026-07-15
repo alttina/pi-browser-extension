@@ -48,6 +48,10 @@ export interface StatusMessage {
   totalTokens?: number;
 }
 
+export interface ClearChatMessage {
+  type: 'clear_chat';
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
@@ -55,4 +59,5 @@ export type Message =
   | ToolResultMessage
   | DoneMessage
   | ErrorMessage
-  | StatusMessage;
+  | StatusMessage
+  | ClearChatMessage;
