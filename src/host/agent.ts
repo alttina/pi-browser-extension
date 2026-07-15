@@ -131,8 +131,10 @@ export class AgentHost {
 
     const content: (TextContent | ImageContent)[] = [];
     if (result && typeof result.screenshot === 'string') {
-      const base64 = result.screenshot.replace(/^data:image\/[^;]+;base64,/, '');
-      content.push({ type: 'image', data: base64, mimeType: 'image/png' });
+      const match = result.screenshot.match(/^data:image\/([^;]+);base64,/);
+      const base64 = match ? result.screenshot.slice(match[0].length) : result.screenshot;
+      const mimeType = match ? `image/${match[1]}` : 'image/png';
+      content.push({ type: 'image', data: base64, mimeType });
     }
     const textResult = typeof result === 'object' && result !== null ? JSON.stringify(result) : String(result);
     content.push({ type: 'text', text: textResult });
@@ -150,6 +152,16 @@ export class AgentHost {
       totalTokens: this.totalTokens || undefined,
     };
     this.onMessage(status);
+  }
+
+  private stripLargeScreenshot(result: unknown): unknown {
+    if (!result || typeof result !== 'object') return result;
+    const record = result as Record<string, unknown>;
+    const screenshot = record.screenshot;
+    if (typeof screenshot === 'string' && screenshot.length > 1000) {
+      return { ...record, screenshot: `<screenshot:${screenshot.slice(0, 30)}...(${screenshot.length} chars)>` };
+    }
+    return result;
   }
 
   private handleEvent(event: Record<string, unknown>) {
@@ -188,7 +200,10 @@ export class AgentHost {
         const toolCallId = String(event.toolCallId);
         const pending = this.pendingToolCalls.get(toolCallId);
         const elapsedMs = pending ? Date.now() - pending.startMs : 0;
-        const resultMsg: ToolResultMessage = { type: 'tool_result', id: toolCallId, result: event.result, elapsedMs, ui: true };
+        // UI messages echo back to the extension; strip large screenshot payloads
+        // so they do not exceed Chrome's 1 MB native messaging limit.
+        const uiResult = this.stripLargeScreenshot(event.result);
+        const resultMsg: ToolResultMessage = { type: 'tool_result', id: toolCallId, result: uiResult, elapsedMs, ui: true };
         this.onMessage(resultMsg);
         this.pendingToolCalls.delete(toolCallId);
         this.emitStatus('thinking');

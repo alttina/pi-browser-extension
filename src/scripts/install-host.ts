@@ -12,12 +12,13 @@ const projectRoot = resolve();
 const hostPath = resolve('dist/host/index.js');
 const wrapperPath = resolve('dist/host/run-host.sh');
 
+const logFile = join(projectRoot, 'host-stderr.log');
 const wrapper = `#!/bin/bash
 # Auto-generated native messaging host wrapper for Pi Browser Agent.
 # Chrome launches this script directly; it then runs the Node host.
 export PATH="${projectRoot}/node_modules/.bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.pi/bin:$PATH"
 cd "${projectRoot}"
-exec node "${hostPath}"
+exec node "${hostPath}" 2>>"${logFile}"
 `;
 
 mkdirSync(resolve('dist/host'), { recursive: true });

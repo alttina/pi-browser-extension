@@ -9,15 +9,16 @@ export interface LogEntry {
   payload: Message;
 }
 
-function extractScreenshot(result: unknown): { dataUrl: string; base64: string } | null {
+function extractScreenshot(result: unknown): { dataUrl: string; base64: string; ext: string } | null {
   if (!result || typeof result !== 'object') return null;
   const screenshot = (result as Record<string, unknown>).screenshot;
-  if (typeof screenshot !== 'string' || !screenshot.startsWith('data:image/png;base64,')) {
-    return null;
-  }
-  const base64 = screenshot.slice('data:image/png;base64,'.length);
+  if (typeof screenshot !== 'string') return null;
+  const match = screenshot.match(/^data:image\/(png|jpeg|jpg|webp);base64,/);
+  if (!match) return null;
+  const base64 = screenshot.slice(match[0].length);
   if (!base64) return null;
-  return { dataUrl: screenshot, base64 };
+  const ext = match[1] === 'jpeg' || match[1] === 'jpg' ? 'jpg' : match[1];
+  return { dataUrl: screenshot, base64, ext };
 }
 
 export class ContextLogger {
@@ -43,7 +44,7 @@ export class ContextLogger {
       const screenshot = extractScreenshot(msg.result);
       if (screenshot) {
         this.screenshotCount += 1;
-        const filename = `screenshot-${this.screenshotCount}.png`;
+        const filename = `screenshot-${this.screenshotCount}.${screenshot.ext}`;
         writeFileSync(join(this.dir, filename), Buffer.from(screenshot.base64, 'base64'));
         const trimmed: ToolResultMessage = {
           ...msg,

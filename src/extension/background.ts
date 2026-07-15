@@ -2,6 +2,72 @@ import type { Message } from '../shared/messages.js';
 
 let port: chrome.runtime.Port | null = null;
 
+// Chrome native messaging limits single messages to 1 MB; stay well under it.
+const MAX_SCREENSHOT_BYTES = 900_000;
+const MAX_NATIVE_MESSAGE_BYTES = 1_000_000;
+
+let offscreenDocReady = false;
+
+async function ensureOffscreenDocument(): Promise<void> {
+  if (offscreenDocReady) return;
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['WORKERS'],
+      justification: 'Resize large screenshots to fit Chrome native messaging limits',
+    });
+  } catch (err: any) {
+    // Already exists or other error; continue optimistically.
+    if (!err?.message?.includes('Only a single offscreen')) {
+      console.error('[background] failed to create offscreen document:', err?.message || err);
+    }
+  }
+  offscreenDocReady = true;
+}
+
+async function resizeWithOffscreen(dataUrl: string): Promise<string> {
+  await ensureOffscreenDocument();
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: 'resize_screenshot', dataUrl }, (res) => {
+      const lastError = chrome.runtime.lastError?.message;
+      if (lastError) {
+        reject(new Error(`Offscreen resize failed: ${lastError}`));
+        return;
+      }
+      if (res?.error) {
+        reject(new Error(res.error));
+        return;
+      }
+      resolve(res?.dataUrl || dataUrl);
+    });
+  });
+}
+
+async function captureVisibleTabUnderLimit(windowId: number): Promise<string> {
+  // Capture lossless PNG first so text is crisp before we resize/compress.
+  const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+  const rawSize = new TextEncoder().encode(dataUrl).length;
+  console.log(`[background] raw screenshot png size=${rawSize} bytes`);
+  if (rawSize <= MAX_SCREENSHOT_BYTES) {
+    return dataUrl;
+  }
+  console.log(`[background] screenshot too large, resizing via offscreen document`);
+  return resizeWithOffscreen(dataUrl);
+}
+
+function postToolResult(id: string, result: Record<string, unknown>, elapsedMs: number) {
+  if (!port) return;
+  const msg = { type: 'tool_result' as const, id, result, elapsedMs };
+  const json = JSON.stringify(msg);
+  const size = new TextEncoder().encode(json).length;
+  if (size > MAX_NATIVE_MESSAGE_BYTES) {
+    console.error(`[background] tool_result size ${size} bytes exceeds native messaging limit; refusing to send to avoid disconnect`);
+    port.postMessage({ type: 'tool_result', id, result: { error: `Screenshot result too large (${size} bytes)` }, elapsedMs });
+    return;
+  }
+  port.postMessage(msg);
+}
+
 function broadcastError(message: string) {
   const errorMsg: Message = { type: 'error', message };
   chrome.runtime.sendMessage(errorMsg, () => {
@@ -34,8 +100,8 @@ function connectPort() {
         if (toolCallMsg.name === 'browser_screenshot') {
           const startMs = Date.now();
           const windowId = tab.windowId;
-          chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).then((dataUrl) => {
-            if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { screenshot: dataUrl }, elapsedMs: Date.now() - startMs });
+          captureVisibleTabUnderLimit(windowId).then((dataUrl) => {
+            postToolResult(toolCallMsg.id, { screenshot: dataUrl }, Date.now() - startMs);
           }).catch((err: Error) => {
             console.error('[background] screenshot failed:', err.message);
             if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { error: err.message }, elapsedMs: Date.now() - startMs });
@@ -124,7 +190,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ error: 'No active window to capture.' });
         return;
       }
-      chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).then((dataUrl) => {
+      captureVisibleTabUnderLimit(windowId).then((dataUrl) => {
+        const json = JSON.stringify({ screenshot: dataUrl });
+        const size = new TextEncoder().encode(json).length;
+        if (size > MAX_NATIVE_MESSAGE_BYTES) {
+          sendResponse({ error: `Screenshot result too large (${size} bytes)` });
+          return;
+        }
         sendResponse({ screenshot: dataUrl });
       }).catch((err: Error) => {
         sendResponse({ error: err.message });

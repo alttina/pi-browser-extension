@@ -9,6 +9,7 @@ const assets = [
   'settings.css',
   'onboarding.html',
   'onboarding.css',
+  'offscreen.html',
 ];
 
 for (const asset of assets) {
