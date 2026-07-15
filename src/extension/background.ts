@@ -94,6 +94,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (!port) connectPort();
+  if (msg.type === 'get_config') {
+    if (!port) {
+      const error = 'Native host not connected. Please run `npm run install:host` and reload the extension.';
+      broadcastError(error);
+      sendResponse({ ok: false, error });
+      return true;
+    }
+    try {
+      port.postMessage(msg);
+      sendResponse({ ok: true });
+    } catch (err: any) {
+      const error = `Failed to send message to native host: ${err.message}`;
+      broadcastError(error);
+      sendResponse({ ok: false, error });
+      port = null;
+    }
+    return true;
+  }
   if (msg.type === 'user' || msg.type === 'tool_result') {
     if (!port) {
       const error = 'Native host not connected. Please run `npm run install:host` and reload the extension.';

@@ -58,6 +58,10 @@ export interface ConfigMessage {
   model?: string;
 }
 
+export interface GetConfigMessage {
+  type: 'get_config';
+}
+
 export type Message =
   | UserMessage
   | AssistantMessage
@@ -67,4 +71,5 @@ export type Message =
   | ErrorMessage
   | StatusMessage
   | ClearChatMessage
-  | ConfigMessage;
+  | ConfigMessage
+  | GetConfigMessage;

@@ -392,3 +392,6 @@ document.querySelectorAll('#settingsView .radio-option').forEach((el) => {
 
 // Load persisted settings (including model) when the side panel opens.
 loadSettings().catch(() => {});
+
+// Ask the host to re-send its config in case the panel opened after startup.
+chrome.runtime.sendMessage({ type: 'get_config' }).catch(() => {});

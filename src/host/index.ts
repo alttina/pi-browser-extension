@@ -35,11 +35,14 @@ async function main() {
   host.bindSession(session);
 
   const modelInfo = host.getModelInfo();
-  if (modelInfo.id) {
-    const configMsg: Message = { type: 'config', provider: modelInfo.provider, model: modelInfo.id };
-    logger?.log('out', configMsg);
-    process.stdout.write(encodeMessage(configMsg));
+  function sendConfig() {
+    if (modelInfo.id) {
+      const configMsg: Message = { type: 'config', provider: modelInfo.provider, model: modelInfo.id };
+      logger?.log('out', configMsg);
+      process.stdout.write(encodeMessage(configMsg));
+    }
   }
+  sendConfig();
 
   let buffer = Buffer.alloc(0) as Buffer;
   process.stdin.on('data', (chunk: Buffer) => {
@@ -59,6 +62,8 @@ async function main() {
           pendingToolCalls.delete(msg.id);
           pending.resolve(msg);
         }
+      } else if (msg.type === 'get_config') {
+        sendConfig();
       }
     }
   });
