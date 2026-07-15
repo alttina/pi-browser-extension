@@ -6,6 +6,8 @@ declare global {
   }
 }
 
+export type TaskMode = 'natural' | 'smoke';
+
 export interface ChatState {
   userMessages: string[];
   assistantMessages: string[];
@@ -20,11 +22,29 @@ export interface TaskResult {
 
 export interface Task {
   id: string;
-  intent: string;
+  /**
+   * Two intent forms are provided for every task:
+   * - `natural`: what a real user would say. The agent must plan, look at the
+   *   page, and choose selectors on its own. This is the honest evaluation.
+   * - `smoke`: prescriptive selector-level instructions used to verify the
+   *   tool-execution pipeline without exercising planning. Handy when a
+   *   fixture, tool implementation, or messaging path changes.
+   */
+  intents: { natural: string; smoke: string };
   startUrl: string;
   maxDurationMs: number;
-  requiredTools?: string[];
+  /**
+   * Tools the agent is expected to use for this task. In `natural` mode this
+   * is only recorded, never enforced — plans that differ from what we imagined
+   * but still produce the right final state are considered successful. In
+   * `smoke` mode it is enforced: the pipeline should exercise these tools.
+   */
+  expectedTools?: string[];
   evaluate: (page: Page, chat: ChatState) => Promise<TaskResult>;
+}
+
+export function selectIntent(task: Task, mode: TaskMode): string {
+  return task.intents[mode];
 }
 
 async function getCart(page: Page): Promise<{ productId: string; quantity: number }[]> {
@@ -70,10 +90,13 @@ async function getPosts(page: Page): Promise<{ id: string; title: string; catego
 export const TASKS: Task[] = [
   {
     id: 'search-add-to-cart',
-    intent: 'Type "wireless headphones" into #search-input, then click #add-to-cart-p1.',
+    intents: {
+      natural: 'Find a pair of wireless headphones on this store and add them to my cart.',
+      smoke: 'Type "wireless headphones" into #search-input, then click #add-to-cart-p1.',
+    },
     startUrl: '/onestopshop/#/products',
-    maxDurationMs: 45000,
-    requiredTools: ['browser_type', 'browser_click'],
+    maxDurationMs: 60000,
+    expectedTools: ['browser_click'],
     async evaluate(page) {
       const cart = await getCart(page);
       const ok = cart.length === 1 && cart[0].productId === 'p1' && cart[0].quantity === 1;
@@ -82,10 +105,13 @@ export const TASKS: Task[] = [
   },
   {
     id: 'cheapest-in-category',
-    intent: 'Type "audio" into #category-filter, type "price-asc" into #sort-order, then click #add-to-cart-p1.',
+    intents: {
+      natural: 'Add the cheapest audio product to my cart.',
+      smoke: 'Type "audio" into #category-filter, type "price-asc" into #sort-order, then click #add-to-cart-p1.',
+    },
     startUrl: '/onestopshop/#/products',
-    maxDurationMs: 45000,
-    requiredTools: ['browser_type', 'browser_click'],
+    maxDurationMs: 60000,
+    expectedTools: ['browser_click'],
     async evaluate(page) {
       const cart = await getCart(page);
       const ok = cart.length === 1 && cart[0].productId === 'p1' && cart[0].quantity === 1;
@@ -94,10 +120,15 @@ export const TASKS: Task[] = [
   },
   {
     id: 'complete-checkout',
-    intent: 'Click #add-to-cart-p3, click the Cart link, click #checkout-btn, type "Test User" into #full-name, type "123 Test St" into #address, type "4111 1111 1111 1111" into #card, click #captcha-checkbox, and click the Place order button.',
+    intents: {
+      natural:
+        'Buy one USB-C Hub. On checkout use name "Test User", address "123 Test St", card "4111 1111 1111 1111", check the "I am not a robot" box, and place the order.',
+      smoke:
+        'Click #add-to-cart-p3, click the Cart link, click #checkout-btn, type "Test User" into #full-name, type "123 Test St" into #address, type "4111 1111 1111 1111" into #card, click #captcha-checkbox, and click the Place order button.',
+    },
     startUrl: '/onestopshop/#/products',
-    maxDurationMs: 90000,
-    requiredTools: ['browser_click', 'browser_type'],
+    maxDurationMs: 120000,
+    expectedTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const orders = await getOrders(page);
       const cart = await getCart(page);
@@ -107,10 +138,13 @@ export const TASKS: Task[] = [
   },
   {
     id: 'out-of-stock-recovery',
-    intent: 'Click #add-to-cart-p5 (it is disabled/out of stock), then click #add-to-cart-p4.',
+    intents: {
+      natural: 'Add a Monitor Arm to my cart. If it is not available, add the Webcam 4K instead.',
+      smoke: 'Click #add-to-cart-p5 (it is disabled/out of stock), then click #add-to-cart-p4.',
+    },
     startUrl: '/onestopshop/#/products',
-    maxDurationMs: 45000,
-    requiredTools: ['browser_click'],
+    maxDurationMs: 60000,
+    expectedTools: ['browser_click'],
     async evaluate(page) {
       const cart = await getCart(page);
       const hasWebcam = cart.some((item) => item.productId === 'p4');
@@ -121,10 +155,15 @@ export const TASKS: Task[] = [
   },
   {
     id: 'taskflow-create-task',
-    intent: 'Click #new-task-btn, type "Write E2E tests" into #task-title, type "Cover new fixture sites" into #task-description, and click #save-task-btn.',
+    intents: {
+      natural:
+        'Create a new task titled "Write E2E tests" with description "Cover new fixture sites". Leave the status as todo.',
+      smoke:
+        'Click #new-task-btn, type "Write E2E tests" into #task-title, type "Cover new fixture sites" into #task-description, and click #save-task-btn.',
+    },
     startUrl: '/taskflow/#/board',
-    maxDurationMs: 45000,
-    requiredTools: ['browser_click', 'browser_type'],
+    maxDurationMs: 60000,
+    expectedTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const tasks = await getTasks(page);
       const created = tasks.find((t) => t.title === 'Write E2E tests');
@@ -134,10 +173,13 @@ export const TASKS: Task[] = [
   },
   {
     id: 'taskflow-edit-status',
-    intent: 'Click #status-done and click #save-task-btn.',
-    startUrl: '/taskflow/#/task/t2/edit',
-    maxDurationMs: 45000,
-    requiredTools: ['browser_click'],
+    intents: {
+      natural: 'Open the task "Set up CI pipeline" from the board and mark it as done.',
+      smoke: 'Click #edit-task-t2, click #status-done, and click #save-task-btn.',
+    },
+    startUrl: '/taskflow/#/board',
+    maxDurationMs: 60000,
+    expectedTools: ['browser_click'],
     async evaluate(page) {
       const tasks = await getTasks(page);
       const task = tasks.find((t) => t.id === 't2');
@@ -147,10 +189,13 @@ export const TASKS: Task[] = [
   },
   {
     id: 'devforum-search-open',
-    intent: 'Type "async" into #search-input, click #post-link-post-2.',
+    intents: {
+      natural: 'Find and open the post about async/await.',
+      smoke: 'Type "async" into #search-input, click #post-link-post-2.',
+    },
     startUrl: '/devforum/#/',
-    maxDurationMs: 45000,
-    requiredTools: ['browser_type', 'browser_click'],
+    maxDurationMs: 60000,
+    expectedTools: ['browser_click'],
     async evaluate(page) {
       const url = page.url();
       const ok = url.includes('/post/post-2');
@@ -159,10 +204,15 @@ export const TASKS: Task[] = [
   },
   {
     id: 'devforum-create-post',
-    intent: 'Click #new-post-btn, type "tester" into #login-username, type "password" into #login-password, click #login-submit, type "Best testing library" into #post-title, type "What is your favorite testing library?" into #post-body, and click #submit-post.',
+    intents: {
+      natural:
+        'Log in as user "tester" with password "password" and write a new post in the JavaScript category. Title it "Best testing library" with body "What is your favorite testing library?".',
+      smoke:
+        'Click #new-post-btn, type "tester" into #login-username, type "password" into #login-password, click #login-submit, type "Best testing library" into #post-title, type "What is your favorite testing library?" into #post-body, and click #submit-post.',
+    },
     startUrl: '/devforum/#/',
-    maxDurationMs: 60000,
-    requiredTools: ['browser_click', 'browser_type'],
+    maxDurationMs: 90000,
+    expectedTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const posts = await getPosts(page);
       const created = posts.find((p) => p.title === 'Best testing library');

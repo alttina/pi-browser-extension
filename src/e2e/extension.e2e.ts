@@ -1,11 +1,20 @@
 import { chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
-import { mkdtempSync, rmSync, existsSync, readFileSync, statSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  statSync,
+  mkdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import { setupHost, EXTENSION_ID } from './setup-host.js';
 import { TASKS } from './tasks/index.js';
-import { runTask, captureChatState, type TaskRunner } from './evaluator.js';
+import type { Task, TaskMode } from './tasks/index.js';
+import { runTask, type TaskRunSummary, type TaskRunner } from './evaluator.js';
 
 const EXTENSION_PATH = resolve('dist/extension');
 const FIXTURE_ROOT = resolve('dist/e2e/fixtures');
@@ -16,6 +25,72 @@ function resolve(p: string): string {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Assertion failed: ${message}`);
+}
+
+function parseMode(raw: string | undefined): TaskMode {
+  const value = (raw || 'natural').toLowerCase();
+  if (value === 'natural' || value === 'smoke') return value;
+  throw new Error(`Invalid E2E_MODE=${raw}. Expected "natural" or "smoke".`);
+}
+
+function selectTasks(all: Task[], filter: string | undefined): Task[] {
+  if (!filter) return all;
+  const wanted = new Set(
+    filter
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+  const selected = all.filter((t) => wanted.has(t.id));
+  const missing = Array.from(wanted).filter((id) => !all.some((t) => t.id === id));
+  if (missing.length > 0) {
+    throw new Error(`Unknown task ID(s) in E2E_TASKS: ${missing.join(', ')}`);
+  }
+  if (selected.length === 0) {
+    throw new Error('E2E_TASKS filter produced an empty task set.');
+  }
+  return selected;
+}
+
+function truncate(s: string | undefined, max: number): string {
+  if (!s) return '';
+  const one = s.replace(/\s+/g, ' ').trim();
+  return one.length > max ? one.slice(0, max - 1) + '…' : one;
+}
+
+function printSummaryTable(summaries: TaskRunSummary[]) {
+  const rows = summaries.map((s) => ({
+    task: s.id,
+    status: s.success ? 'PASS' : s.timedOut ? 'TIMEOUT' : 'FAIL',
+    tools: s.toolCallCount,
+    ms: s.durationMs,
+    trajectory: truncate(s.toolTrajectory.join(' → '), 60),
+    note: truncate(s.reason || s.completion, 60),
+  }));
+
+  const columns: { key: keyof (typeof rows)[number]; label: string; align: 'l' | 'r' }[] = [
+    { key: 'task', label: 'Task', align: 'l' },
+    { key: 'status', label: 'Status', align: 'l' },
+    { key: 'tools', label: 'Tools', align: 'r' },
+    { key: 'ms', label: 'Ms', align: 'r' },
+    { key: 'trajectory', label: 'Trajectory', align: 'l' },
+    { key: 'note', label: 'Note', align: 'l' },
+  ];
+
+  const widths = columns.map((c) =>
+    Math.max(c.label.length, ...rows.map((r) => String(r[c.key] ?? '').length)),
+  );
+
+  const pad = (text: string, width: number, align: 'l' | 'r') =>
+    align === 'r' ? text.padStart(width) : text.padEnd(width);
+
+  const header = columns.map((c, i) => pad(c.label, widths[i], c.align)).join('  ');
+  const divider = widths.map((w) => '-'.repeat(w)).join('  ');
+  console.log('\n' + header);
+  console.log(divider);
+  for (const r of rows) {
+    console.log(columns.map((c, i) => pad(String(r[c.key] ?? ''), widths[i], c.align)).join('  '));
+  }
 }
 
 function startFixtureServer(): Promise<{ server: Server; url: string }> {
@@ -71,7 +146,6 @@ async function getServiceWorker(context: BrowserContext): Promise<Worker> {
 }
 
 async function closeBlankTabs(context: BrowserContext, keepPages: Page[]) {
-  const keepUrls = new Set(keepPages.map((p) => p.url()));
   for (const page of context.pages()) {
     if (page.url() === 'about:blank' && !keepPages.includes(page)) {
       await page.close().catch(() => {});
@@ -90,11 +164,16 @@ async function openRealSidePanel(targetPage: Page) {
 }
 
 async function run() {
+  const mode = parseMode(process.env.E2E_MODE);
+  const tasks = selectTasks(TASKS, process.env.E2E_TASKS);
+  console.log(`E2E mode: ${mode}`);
+  console.log(`Tasks: ${tasks.map((t) => t.id).join(', ')}`);
+
   const { server, url: fixtureUrl } = await startFixtureServer();
   console.log(`Fixture server: ${fixtureUrl}`);
 
   const profileDir = mkdtempSync(join(tmpdir(), 'pi-browser-agent-e2e-'));
-  const logDir = join(process.cwd(), 'e2e-context-logs', Date.now().toString());
+  const logDir = join(process.cwd(), 'e2e-context-logs', `${mode}-${Date.now()}`);
   mkdirSync(logDir, { recursive: true });
   const hostSetup = setupHost(profileDir, logDir);
   console.log(`Profile: ${profileDir}`);
@@ -111,6 +190,9 @@ async function run() {
       '--no-default-browser-check',
     ],
   });
+
+  const summaries: TaskRunSummary[] = [];
+  const runStartedAt = new Date().toISOString();
 
   try {
     const worker = await getServiceWorker(context);
@@ -148,6 +230,17 @@ async function run() {
           chrome.runtime.sendMessage({ type: 'clear_chat' });
         });
       },
+      async newSession() {
+        // Fire the message via the sidepanel page so it goes through the same
+        // background → native host path a real user would exercise.
+        await sidePanelPage.evaluate(() => {
+          chrome.runtime.sendMessage({ type: 'new_session' });
+        });
+        // Give the host time to dispose the old Pi session and construct a
+        // new one. resetSession internally awaits createAgentSession, which
+        // does a bit of I/O; 500ms is a safe upper bound for a local host.
+        await sidePanelPage.waitForTimeout(500);
+      },
       async sendIntent(intent: string) {
         await sidePanelPage.evaluate((text: string) => {
           const input = document.getElementById('input') as HTMLTextAreaElement;
@@ -168,21 +261,31 @@ async function run() {
       },
     };
 
-    const results: { id: string; success: boolean; reason?: string; durationMs: number }[] = [];
+    for (const task of tasks) {
+      console.log(`\nRunning task: ${task.id} [${mode}]`);
+      const { summary } = await runTask(runner, task, { mode });
+      summaries.push(summary);
 
-    for (const task of TASKS) {
-      console.log(`\nRunning task: ${task.id}`);
-      const { result, chat, durationMs } = await runTask(runner, task);
-      results.push({ id: task.id, success: result.success, reason: result.reason, durationMs });
-      const status = result.success ? 'PASS' : 'FAIL';
-      console.log(`[${status}] ${task.id} (${durationMs}ms) ${result.reason ? '- ' + result.reason : ''}`);
-      console.log(`  Completion: ${chat.completion || '(none)'}`);
-      console.log(`  Tools: ${chat.toolCalls.map((t) => t.name).join(' → ') || '(none)'}`);
+      const status = summary.success ? 'PASS' : summary.timedOut ? 'TIMEOUT' : 'FAIL';
+      console.log(
+        `[${status}] ${summary.id} (${summary.durationMs}ms, ${summary.toolCallCount} tools)`
+        + (summary.reason ? ` - ${summary.reason}` : ''),
+      );
+      console.log(`  Intent: ${summary.intent}`);
+      console.log(`  Completion: ${summary.completion || '(none)'}`);
+      console.log(`  Trajectory: ${summary.toolTrajectory.join(' → ') || '(none)'}`);
+      if (summary.missingExpectedTools.length > 0) {
+        console.log(`  Missing expected tools: ${summary.missingExpectedTools.join(', ')}`);
+      }
 
-      if (!result.success) {
+      if (!summary.success) {
         const ts = Date.now();
-        await targetPage.screenshot({ path: `e2e-screenshots/${task.id}-page-${ts}.png` });
-        await sidePanelPage.screenshot({ path: `e2e-screenshots/${task.id}-panel-${ts}.png` });
+        await targetPage
+          .screenshot({ path: `e2e-screenshots/${task.id}-page-${ts}.png` })
+          .catch(() => {});
+        await sidePanelPage
+          .screenshot({ path: `e2e-screenshots/${task.id}-panel-${ts}.png` })
+          .catch(() => {});
       }
 
       // Clear chat for next task by reloading the side panel page.
@@ -191,9 +294,10 @@ async function run() {
       await targetPage.bringToFront();
     }
 
-    const passed = results.filter((r) => r.success).length;
-    const total = results.length;
-    console.log(`\nE2E summary: ${passed}/${total} tasks passed`);
+    const passed = summaries.filter((r) => r.success).length;
+    const total = summaries.length;
+    console.log(`\nE2E summary [${mode}]: ${passed}/${total} tasks passed`);
+    printSummaryTable(summaries);
 
     if (passed < total) {
       throw new Error(`E2E failed: ${total - passed} task(s) failed`);
@@ -201,6 +305,33 @@ async function run() {
 
     console.log('\nAll E2E assertions passed.');
   } finally {
+    try {
+      const summaryPath = join(logDir, 'summary.json');
+      const passed = summaries.filter((r) => r.success).length;
+      const timedOut = summaries.filter((r) => r.timedOut).length;
+      writeFileSync(
+        summaryPath,
+        JSON.stringify(
+          {
+            mode,
+            startedAt: runStartedAt,
+            finishedAt: new Date().toISOString(),
+            fixtureUrl,
+            total: summaries.length,
+            passed,
+            failed: summaries.length - passed,
+            timedOut,
+            tasks: summaries,
+          },
+          null,
+          2,
+        ),
+      );
+      console.log(`Summary written: ${summaryPath}`);
+    } catch (err) {
+      console.error('Failed to write summary.json:', err);
+    }
+
     await context.close();
     server.close();
     rmSync(profileDir, { recursive: true, force: true });
