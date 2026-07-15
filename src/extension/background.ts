@@ -19,11 +19,28 @@ function connectPort() {
     if (msg.type === 'tool_call' && !msg.ui) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tabId = tabs[0]?.id;
-        if (tabId) {
-          chrome.tabs.sendMessage(tabId, msg, (res) => {
-            if (res && port) port.postMessage(res);
-          });
+        if (!tabId) {
+          const error = 'No active tab found to execute browser tool.';
+          console.error('[background]', error);
+          if (port) port.postMessage({ type: 'tool_result', id: msg.id, result: { error }, elapsedMs: 0 });
+          return;
         }
+        chrome.tabs.sendMessage(tabId, msg, (res) => {
+          const lastError = chrome.runtime.lastError?.message;
+          if (lastError) {
+            const error = `Content script error: ${lastError}`;
+            console.error('[background]', error);
+            if (port) port.postMessage({ type: 'tool_result', id: msg.id, result: { error }, elapsedMs: 0 });
+            return;
+          }
+          if (res && port) {
+            port.postMessage(res);
+          } else if (!res && port) {
+            const error = 'Content script did not respond. Try reloading the page.';
+            console.error('[background]', error, msg);
+            port.postMessage({ type: 'tool_result', id: msg.id, result: { error }, elapsedMs: 0 });
+          }
+        });
       });
     } else {
       chrome.runtime.sendMessage(msg).catch(() => {});
@@ -61,10 +78,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
   if (msg.type === 'capture_tab') {
-    chrome.tabs.captureVisibleTab({ format: 'png' }).then((dataUrl) => {
-      sendResponse({ screenshot: dataUrl });
-    }).catch((err: Error) => {
-      sendResponse({ error: err.message });
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      const windowId = tab?.windowId;
+      if (!windowId) {
+        sendResponse({ error: 'No active window to capture.' });
+        return;
+      }
+      chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).then((dataUrl) => {
+        sendResponse({ screenshot: dataUrl });
+      }).catch((err: Error) => {
+        sendResponse({ error: err.message });
+      });
     });
     return true;
   }

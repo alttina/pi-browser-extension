@@ -145,8 +145,17 @@ async function clickTool(args: Record<string, unknown>): Promise<ToolResult> {
 async function screenshotTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { fullPage } = args as { fullPage?: boolean };
   const start = performance.now();
-  const dataUrl = await new Promise<string>((resolve) => {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     chrome.runtime.sendMessage({ type: 'capture_tab', fullPage: !!fullPage }, (response) => {
+      const lastError = chrome.runtime.lastError?.message;
+      if (lastError) {
+        reject(new Error(`capture_tab failed: ${lastError}`));
+        return;
+      }
+      if (response?.error) {
+        reject(new Error(response.error));
+        return;
+      }
       resolve(response?.screenshot || '');
     });
   });
