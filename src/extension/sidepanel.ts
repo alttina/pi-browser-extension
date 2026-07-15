@@ -18,6 +18,7 @@ const statusTitle = document.getElementById('statusTitle') as HTMLSpanElement;
 const statusStep = document.getElementById('statusStep') as HTMLSpanElement;
 const statusTools = document.getElementById('statusTools') as HTMLSpanElement;
 const statusTokens = document.getElementById('statusTokens') as HTMLSpanElement;
+const modelBadge = document.getElementById('modelBadge') as HTMLSpanElement;
 
 const stepLabels: Record<AgentStatus, string> = {
   thinking: 'Thinking…',
@@ -326,14 +327,30 @@ function readFromForm(): Settings {
   };
 }
 
+function formatModelName(model: string): string {
+  if (!model) return 'default';
+  // Strip date suffixes like -20250514 and vendor prefixes for a compact badge label.
+  const compact = model.replace(/-\d{8}$/, '').replace(/^claude-/, '');
+  return compact || model;
+}
+
+function updateModelBadge(settings: Settings) {
+  if (modelBadge) {
+    modelBadge.textContent = formatModelName(settings.model);
+  }
+}
+
 async function loadSettings() {
   const stored = await chrome.storage.local.get(DEFAULTS as unknown as Record<string, unknown>);
-  applyToForm(stored as unknown as Settings);
+  const settings = stored as unknown as Settings;
+  applyToForm(settings);
+  updateModelBadge(settings);
 }
 
 async function saveSettings() {
   const settings = readFromForm();
   await chrome.storage.local.set(settings as unknown as Record<string, unknown>);
+  updateModelBadge(settings);
   const saveBtn = getSettingEl<HTMLButtonElement>('saveBtn');
   const original = saveBtn.textContent;
   saveBtn.textContent = 'Saved';
@@ -372,3 +389,6 @@ document.querySelectorAll('#settingsView .toggle').forEach((el) => {
 document.querySelectorAll('#settingsView .radio-option').forEach((el) => {
   el.addEventListener('click', () => selectAuth(el.getAttribute('data-value') || 'pi'));
 });
+
+// Load persisted settings (including model) when the side panel opens.
+loadSettings().catch(() => {});
