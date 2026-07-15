@@ -8,11 +8,26 @@ if (!extensionId) {
   process.exit(1);
 }
 
+const projectRoot = resolve();
 const hostPath = resolve('dist/host/index.js');
+const wrapperPath = resolve('dist/host/run-host.sh');
+
+const wrapper = `#!/bin/bash
+# Auto-generated native messaging host wrapper for Pi Browser Agent.
+# Chrome launches this script directly; it then runs the Node host.
+export PATH="${projectRoot}/node_modules/.bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.pi/bin:$PATH"
+cd "${projectRoot}"
+exec node "${hostPath}"
+`;
+
+mkdirSync(resolve('dist/host'), { recursive: true });
+writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
+chmodSync(wrapperPath, 0o755);
+
 const manifest = {
   name: 'com.pi.browser_agent',
   description: 'Pi Browser Agent Native Host',
-  path: hostPath,
+  path: wrapperPath,
   type: 'stdio',
   allowed_origins: [`chrome-extension://${extensionId}/`],
 };
@@ -32,5 +47,5 @@ if (p === 'darwin') {
 mkdirSync(targetDir, { recursive: true });
 const targetFile = join(targetDir, 'com.pi.browser_agent.json');
 writeFileSync(targetFile, JSON.stringify(manifest, null, 2));
-chmodSync(hostPath, 0o755);
 console.log(`Wrote ${targetFile}`);
+console.log(`Wrote ${wrapperPath}`);
