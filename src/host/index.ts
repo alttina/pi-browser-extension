@@ -7,6 +7,27 @@ const TOOL_RESULT_TIMEOUT_MS = 60_000;
 const LOG_DIR = process.env.PI_BROWSER_AGENT_LOG_DIR;
 const logger = LOG_DIR ? new ContextLogger(LOG_DIR) : null;
 
+function sendError(message: string) {
+  const errorMsg: Message = { type: 'error', message };
+  try {
+    process.stdout.write(encodeMessage(errorMsg));
+  } catch (err) {
+    console.error('[host] failed to send error message:', err);
+  }
+}
+
+process.on('uncaughtException', (err: Error) => {
+  console.error('[host] uncaughtException:', err);
+  sendError(`Host crashed: ${err.message}`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  console.error('[host] unhandledRejection:', reason);
+  sendError(`Host error: ${message}`);
+});
+
 const pendingToolCalls = new Map<
   string,
   { resolve: (msg: ToolResultMessage) => void; reject: (err: Error) => void; timeout: NodeJS.Timeout }
@@ -27,7 +48,11 @@ async function main() {
 
   host.onMessage = (msg: Message) => {
     logger?.log('out', msg);
-    process.stdout.write(encodeMessage(msg));
+    try {
+      process.stdout.write(encodeMessage(msg));
+    } catch (err) {
+      console.error('[host] failed to send message:', err);
+    }
   };
 
   const tools = host.getCustomTools();
@@ -46,34 +71,46 @@ async function main() {
 
   let buffer = Buffer.alloc(0) as Buffer;
   process.stdin.on('data', (chunk: Buffer) => {
-    buffer = Buffer.concat([buffer, chunk]) as unknown as Buffer;
-    const { messages, remainder } = decodeMessages(buffer);
-    buffer = remainder as unknown as Buffer;
-    for (const msg of messages) {
-      logger?.log('in', msg);
-      if (msg.type === 'user') {
-        host.sendUserMessage(msg.text).catch((err: Error) => {
-          process.stdout.write(encodeMessage({ type: 'error', message: err.message }));
-        });
-      } else if (msg.type === 'tool_result') {
-        const pending = pendingToolCalls.get(msg.id);
-        if (pending) {
-          clearTimeout(pending.timeout);
-          pendingToolCalls.delete(msg.id);
-          pending.resolve(msg);
+    try {
+      buffer = Buffer.concat([buffer, chunk]) as unknown as Buffer;
+      const { messages, remainder } = decodeMessages(buffer);
+      buffer = remainder as unknown as Buffer;
+      for (const msg of messages) {
+        logger?.log('in', msg);
+        if (msg.type === 'user') {
+          host.sendUserMessage(msg.text).catch((err: Error) => {
+            console.error('[host] sendUserMessage failed:', err);
+            sendError(err.message);
+          });
+        } else if (msg.type === 'tool_result') {
+          const pending = pendingToolCalls.get(msg.id);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingToolCalls.delete(msg.id);
+            pending.resolve(msg);
+          }
+        } else if (msg.type === 'get_config') {
+          sendConfig();
         }
-      } else if (msg.type === 'get_config') {
-        sendConfig();
       }
+    } catch (err) {
+      console.error('[host] error processing stdin data:', err);
+      sendError(err instanceof Error ? err.message : String(err));
     }
   });
 
   process.stdin.on('end', () => {
+    console.error('[host] stdin ended');
+    host.dispose();
+  });
+  process.stdin.on('close', () => {
+    console.error('[host] stdin closed');
     host.dispose();
   });
 }
 
 main().catch((err: Error) => {
-  process.stdout.write(encodeMessage({ type: 'error', message: err.message }));
+  console.error('[host] main failed:', err);
+  sendError(err.message);
   process.exit(1);
 });
