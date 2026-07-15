@@ -99,8 +99,9 @@ export class AgentHost {
     this.session = undefined;
   }
 
-  getModelId(): string | undefined {
-    return this.session?.model?.id;
+  getModelInfo(): { provider?: string; id?: string; name?: string } {
+    const model = this.session?.model;
+    return { provider: model?.provider, id: model?.id, name: model?.name };
   }
 
   private defineTool<T extends TSchema>(

@@ -224,7 +224,7 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   } else if (msg.type === 'status') updateStatus(msg);
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'error') appendError(msg.message);
-  else if (msg.type === 'config' && msg.model) updateModelBadge(msg.model);
+  else if (msg.type === 'config' && msg.model) updateModelBadge(msg.provider, msg.model);
 });
 
 interface Settings {
@@ -328,16 +328,15 @@ function readFromForm(): Settings {
   };
 }
 
-function formatModelName(model: string): string {
+function formatModelBadge(provider: string | undefined, model: string): string {
   if (!model) return 'default';
-  // Strip date suffixes like -20250514 and vendor prefixes for a compact badge label.
-  const compact = model.replace(/-\d{8}$/, '').replace(/^claude-/, '');
-  return compact || model;
+  const compact = model.replace(/-\d{8}$/, '');
+  return provider ? `${provider}/${compact}` : compact;
 }
 
-function updateModelBadge(model: string) {
+function updateModelBadge(provider: string | undefined, model: string) {
   if (modelBadge) {
-    modelBadge.textContent = formatModelName(model);
+    modelBadge.textContent = formatModelBadge(provider, model);
   }
 }
 
@@ -345,13 +344,13 @@ async function loadSettings() {
   const stored = await chrome.storage.local.get(DEFAULTS as unknown as Record<string, unknown>);
   const settings = stored as unknown as Settings;
   applyToForm(settings);
-  updateModelBadge(settings.model);
+  updateModelBadge(undefined, settings.model);
 }
 
 async function saveSettings() {
   const settings = readFromForm();
   await chrome.storage.local.set(settings as unknown as Record<string, unknown>);
-  updateModelBadge(settings.model);
+  updateModelBadge(undefined, settings.model);
   const saveBtn = getSettingEl<HTMLButtonElement>('saveBtn');
   const original = saveBtn.textContent;
   saveBtn.textContent = 'Saved';

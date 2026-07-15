@@ -34,9 +34,9 @@ async function main() {
   const session = await host.createSession(tools);
   host.bindSession(session);
 
-  const modelId = host.getModelId();
-  if (modelId) {
-    const configMsg: Message = { type: 'config', model: modelId };
+  const modelInfo = host.getModelInfo();
+  if (modelInfo.id) {
+    const configMsg: Message = { type: 'config', provider: modelInfo.provider, model: modelInfo.id };
     logger?.log('out', configMsg);
     process.stdout.write(encodeMessage(configMsg));
   }

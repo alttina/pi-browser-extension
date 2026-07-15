@@ -54,6 +54,7 @@ export interface ClearChatMessage {
 
 export interface ConfigMessage {
   type: 'config';
+  provider?: string;
   model?: string;
 }
 
