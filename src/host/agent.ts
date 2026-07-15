@@ -54,6 +54,7 @@ export type SessionLike = Pick<AgentSession, 'subscribe' | 'sendUserMessage' | '
 export class AgentHost {
   private session?: SessionLike;
   private sendToExtension: SendToExtension;
+  private tools?: ToolDefinition[];
   onMessage: (msg: Message) => void = () => {};
 
   private startMs = 0;
@@ -80,6 +81,7 @@ export class AgentHost {
   }
 
   async createSession(tools: ToolDefinition[]): Promise<SessionLike> {
+    this.tools = tools;
     const loader = new DefaultResourceLoader({
       cwd: PROJECT_ROOT,
       agentDir: getAgentDir(),
@@ -109,6 +111,39 @@ export class AgentHost {
   bindSession(session: SessionLike) {
     this.session = session;
     session.subscribe((event) => this.handleEvent(event as unknown as Record<string, unknown>));
+  }
+
+  /**
+   * Dispose the current session and create a fresh one with the same tools.
+   * Any pending tool calls are dropped — callers should only invoke this
+   * between turns. Session-level counters and pending-tool tracking are also
+   * reset so the next turn starts clean.
+   */
+  async resetSession(): Promise<void> {
+    if (!this.tools) {
+      throw new Error('resetSession called before createSession — no tools cached');
+    }
+    // Drop any in-flight tool tracking; the extension will discard results
+    // for the disposed session's tool_call ids.
+    this.pendingToolCalls.clear();
+    this.startMs = 0;
+    this.toolCount = 0;
+    this.totalTokens = 0;
+    this.currentStatus = 'thinking';
+    this.settled = false;
+
+    const oldSession = this.session;
+    this.session = undefined;
+    try {
+      oldSession?.dispose();
+    } catch (err) {
+      // Best-effort: log and continue.
+      // eslint-disable-next-line no-console
+      console.error('[agent] error disposing previous session:', err);
+    }
+
+    const newSession = await this.createSession(this.tools);
+    this.bindSession(newSession);
   }
 
   async sendUserMessage(text: string) {

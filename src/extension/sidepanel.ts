@@ -108,16 +108,25 @@ function appendError(message: string) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+function ensureToolHistoryEl(): HTMLElement {
+  let el = document.getElementById('tool-history');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tool-history';
+    el.className = 'hidden';
+    chat.appendChild(el);
+  }
+  return el;
+}
+
+function writeToolHistory() {
+  ensureToolHistoryEl().textContent = JSON.stringify(toolHistory);
+}
+
 function appendDone(msg: DoneMessage) {
   setDoneStatus(msg.toolCount, msg.totalMs, msg.totalTokens);
   appendSummary(msg.summary);
-
-  const history = document.createElement('div');
-  history.id = 'tool-history';
-  history.className = 'hidden';
-  history.textContent = JSON.stringify(toolHistory);
-  chat.appendChild(history);
-
+  writeToolHistory();
   toolHistory.length = 0;
 }
 
@@ -218,9 +227,11 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
     clearChat();
   } else if (msg.type === 'tool_call' && msg.ui === true) {
     toolHistory.push({ id: msg.id, name: msg.name, args: msg.args });
+    writeToolHistory();
   } else if (msg.type === 'tool_result' && msg.ui === true) {
     const entry = toolHistory.find((t) => t.id === msg.id);
     if (entry) entry.elapsedMs = msg.elapsedMs;
+    writeToolHistory();
   } else if (msg.type === 'status') updateStatus(msg);
   else if (msg.type === 'done') appendDone(msg);
   else if (msg.type === 'error') appendError(msg.message);
@@ -262,6 +273,9 @@ const statusBadge = document.getElementById('statusBadge') as HTMLDivElement;
 const newChatBtn = document.getElementById('newChatBtn') as HTMLButtonElement;
 newChatBtn.addEventListener('click', () => {
   clearChat();
+  // Tell the native host to dispose the current Pi session and start a fresh
+  // one so the next message doesn't inherit prior turns' context.
+  chrome.runtime.sendMessage({ type: 'new_session' }).catch(() => {});
   input.focus();
 });
 

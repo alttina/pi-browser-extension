@@ -52,6 +52,15 @@ export interface ClearChatMessage {
   type: 'clear_chat';
 }
 
+/**
+ * Instructs the native host to dispose the current Pi AgentSession and start
+ * a fresh one with the same tools. Used by the side-panel "New chat" button
+ * and by the E2E runner between tasks to prevent context pollution.
+ */
+export interface NewSessionMessage {
+  type: 'new_session';
+}
+
 export interface ConfigMessage {
   type: 'config';
   provider?: string;
@@ -71,5 +80,6 @@ export type Message =
   | ErrorMessage
   | StatusMessage
   | ClearChatMessage
+  | NewSessionMessage
   | ConfigMessage
   | GetConfigMessage;

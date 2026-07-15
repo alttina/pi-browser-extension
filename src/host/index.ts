@@ -59,8 +59,8 @@ async function main() {
   const session = await host.createSession(tools);
   host.bindSession(session);
 
-  const modelInfo = host.getModelInfo();
   function sendConfig() {
+    const modelInfo = host.getModelInfo();
     if (modelInfo.id) {
       const configMsg: Message = { type: 'config', provider: modelInfo.provider, model: modelInfo.id };
       logger?.log('out', configMsg);
@@ -70,6 +70,17 @@ async function main() {
   sendConfig();
 
   let buffer = Buffer.alloc(0) as Buffer;
+  // Serialize message handling so new_session's async resetSession() completes
+  // before subsequent user/tool_result messages are processed. All handlers
+  // run through this queue, but fire-and-forget ones resolve immediately.
+  let handlerQueue: Promise<void> = Promise.resolve();
+
+  function enqueue(fn: () => Promise<void> | void): void {
+    handlerQueue = handlerQueue.then(() => fn()).catch((err) => {
+      console.error('[host] queued handler failed:', err);
+    });
+  }
+
   process.stdin.on('data', (chunk: Buffer) => {
     try {
       buffer = Buffer.concat([buffer, chunk]) as unknown as Buffer;
@@ -78,19 +89,41 @@ async function main() {
       for (const msg of messages) {
         logger?.log('in', msg);
         if (msg.type === 'user') {
-          host.sendUserMessage(msg.text).catch((err: Error) => {
-            console.error('[host] sendUserMessage failed:', err);
-            sendError(err.message);
+          enqueue(() => {
+            host.sendUserMessage(msg.text).catch((err: Error) => {
+              console.error('[host] sendUserMessage failed:', err);
+              sendError(err.message);
+            });
           });
         } else if (msg.type === 'tool_result') {
-          const pending = pendingToolCalls.get(msg.id);
-          if (pending) {
-            clearTimeout(pending.timeout);
-            pendingToolCalls.delete(msg.id);
-            pending.resolve(msg);
-          }
+          enqueue(() => {
+            const pending = pendingToolCalls.get(msg.id);
+            if (pending) {
+              clearTimeout(pending.timeout);
+              pendingToolCalls.delete(msg.id);
+              pending.resolve(msg);
+            }
+          });
+        } else if (msg.type === 'new_session') {
+          enqueue(async () => {
+            // Reject any in-flight tool promises from the outgoing session so
+            // the awaiter unwinds cleanly instead of hanging until timeout.
+            for (const [id, pending] of pendingToolCalls) {
+              clearTimeout(pending.timeout);
+              pending.reject(new Error('Session reset before tool result arrived'));
+              pendingToolCalls.delete(id);
+            }
+            try {
+              await host.resetSession();
+              sendConfig();
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.error('[host] resetSession failed:', err);
+              sendError(`Failed to reset session: ${message}`);
+            }
+          });
         } else if (msg.type === 'get_config') {
-          sendConfig();
+          enqueue(() => sendConfig());
         }
       }
     } catch (err) {

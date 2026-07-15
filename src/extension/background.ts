@@ -223,7 +223,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     return true;
   }
-  if (msg.type === 'user' || msg.type === 'tool_result') {
+  if (msg.type === 'user' || msg.type === 'tool_result' || msg.type === 'new_session') {
     if (!port) {
       const error = 'Native host not connected. Please run `npm run install:host` and reload the extension.';
       broadcastError(error);
