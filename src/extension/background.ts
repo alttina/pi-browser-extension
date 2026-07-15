@@ -4,14 +4,16 @@ let port: chrome.runtime.Port | null = null;
 
 function broadcastError(message: string) {
   const errorMsg: Message = { type: 'error', message };
-  chrome.runtime.sendMessage(errorMsg).catch(() => {});
+  chrome.runtime.sendMessage(errorMsg, () => {
+    chrome.runtime.lastError; // swallow "receiving end does not exist" when panel is closed
+  });
 }
 
 function connectPort() {
   port = chrome.runtime.connectNative('com.pi.browser_agent');
   port.onDisconnect.addListener(() => {
     const error = chrome.runtime.lastError?.message || 'Native host disconnected. Is Pi installed and the native messaging host registered?';
-    console.error('[background] native port disconnected', chrome.runtime.lastError);
+    console.error('[background] native port disconnected:', error);
     broadcastError(error);
     port = null;
   });
@@ -43,7 +45,9 @@ function connectPort() {
         });
       });
     } else {
-      chrome.runtime.sendMessage(msg).catch(() => {});
+      chrome.runtime.sendMessage(msg, () => {
+        chrome.runtime.lastError; // swallow when no extension page is listening
+      });
     }
   });
 }
@@ -73,7 +77,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
   if (msg.type === 'clear_chat') {
-    chrome.runtime.sendMessage(msg).catch(() => {});
+    chrome.runtime.sendMessage(msg, () => {
+      chrome.runtime.lastError; // swallow when panel is closed
+    });
     sendResponse({ ok: true });
     return false;
   }

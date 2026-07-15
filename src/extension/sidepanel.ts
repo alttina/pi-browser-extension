@@ -394,4 +394,6 @@ document.querySelectorAll('#settingsView .radio-option').forEach((el) => {
 loadSettings().catch(() => {});
 
 // Ask the host to re-send its config in case the panel opened after startup.
-chrome.runtime.sendMessage({ type: 'get_config' }).catch(() => {});
+chrome.runtime.sendMessage({ type: 'get_config' }, () => {
+  chrome.runtime.lastError; // swallow if background is not yet listening
+});
