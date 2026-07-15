@@ -138,6 +138,23 @@ body {
   line-height: 12px;
 }
 
+.status-error .status-icon::after {
+  content: '!';
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 12px;
+}
+
+.status-error .status-title {
+  color: var(--accent);
+}
+
+.status-error .status-step {
+  color: var(--accent);
+}
+
 .status-title {
   font-weight: 500;
 }

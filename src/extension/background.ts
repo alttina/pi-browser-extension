@@ -2,10 +2,17 @@ import type { Message } from '../shared/messages.js';
 
 let port: chrome.runtime.Port | null = null;
 
+function broadcastError(message: string) {
+  const errorMsg: Message = { type: 'error', message };
+  chrome.runtime.sendMessage(errorMsg).catch(() => {});
+}
+
 function connectPort() {
   port = chrome.runtime.connectNative('com.pi.browser_agent');
   port.onDisconnect.addListener(() => {
+    const error = chrome.runtime.lastError?.message || 'Native host disconnected. Is Pi installed and the native messaging host registered?';
     console.error('[background] native port disconnected', chrome.runtime.lastError);
+    broadcastError(error);
     port = null;
   });
   port.onMessage.addListener((msg: Message) => {
@@ -62,14 +69,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (!port) connectPort();
-  if (msg.type === 'user' && port) {
-    port.postMessage(msg);
-    sendResponse({ ok: true });
-  } else if (msg.type === 'tool_result' && port) {
-    port.postMessage(msg);
-    sendResponse({ ok: true });
-  } else {
-    sendResponse({ ok: false });
+  if (msg.type === 'user' || msg.type === 'tool_result') {
+    if (!port) {
+      const error = 'Native host not connected. Please run `npm run install:host` and reload the extension.';
+      broadcastError(error);
+      sendResponse({ ok: false, error });
+      return true;
+    }
+    try {
+      port.postMessage(msg);
+      sendResponse({ ok: true });
+    } catch (err: any) {
+      const error = `Failed to send message to native host: ${err.message}`;
+      broadcastError(error);
+      sendResponse({ ok: false, error });
+      port = null;
+    }
+    return true;
   }
-  return true;
+  sendResponse({ ok: false });
 });

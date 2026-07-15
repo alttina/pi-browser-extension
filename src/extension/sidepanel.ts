@@ -91,10 +91,18 @@ function appendSummary(summary: string) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+function setErrorStatus(message: string) {
+  statusEl.classList.remove('status-working', 'status-done');
+  statusEl.classList.add('status-error');
+  statusTitle.textContent = 'Error';
+  statusStep.textContent = message;
+}
+
 function appendError(message: string) {
+  setErrorStatus(message);
   const row = document.createElement('div');
   row.className = 'message agent error';
-  row.innerHTML = `<div class="bubble"><div class="bubble-text">Error: ${escapeHtml(message)}</div></div>`;
+  row.innerHTML = `<div class="bubble"><div class="bubble-text">${escapeHtml(message)}</div></div>`;
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
 }
