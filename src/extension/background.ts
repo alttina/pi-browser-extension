@@ -19,30 +19,48 @@ function connectPort() {
   });
   port.onMessage.addListener((msg: Message) => {
     if (msg.type === 'tool_call' && !msg.ui) {
+      const toolCallMsg = msg as Extract<Message, { type: 'tool_call' }>;
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tabId = tabs[0]?.id;
         if (!tabId) {
           const error = 'No active tab found to execute browser tool.';
           console.error('[background]', error);
-          if (port) port.postMessage({ type: 'tool_result', id: msg.id, result: { error }, elapsedMs: 0 });
+          if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { error }, elapsedMs: 0 });
           return;
         }
-        chrome.tabs.sendMessage(tabId, msg, (res) => {
-          const lastError = chrome.runtime.lastError?.message;
-          if (lastError) {
-            const error = `Content script error: ${lastError}`;
-            console.error('[background]', error);
-            if (port) port.postMessage({ type: 'tool_result', id: msg.id, result: { error }, elapsedMs: 0 });
-            return;
-          }
-          if (res && port) {
-            port.postMessage(res);
-          } else if (!res && port) {
-            const error = 'Content script did not respond. Try reloading the page.';
-            console.error('[background]', error, msg);
-            port.postMessage({ type: 'tool_result', id: msg.id, result: { error }, elapsedMs: 0 });
-          }
-        });
+        function forwardToolCall(attemptInject = true) {
+          chrome.tabs.sendMessage(tabId!, toolCallMsg, (res) => {
+            const lastError = chrome.runtime.lastError?.message;
+            if (lastError || !res) {
+              if (attemptInject && lastError?.includes('Could not establish connection')) {
+                console.error('[background] content script not found, injecting...');
+                chrome.scripting.executeScript(
+                  { target: { tabId: tabId! }, files: ['content.js'] },
+                  () => {
+                    const injectError = chrome.runtime.lastError?.message;
+                    if (injectError) {
+                      const error = `Failed to inject content script: ${injectError}`;
+                      console.error('[background]', error);
+                      if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { error }, elapsedMs: 0 });
+                      return;
+                    }
+                    // Retry once after injection.
+                    forwardToolCall(false);
+                  }
+                );
+                return;
+              }
+              const error = lastError ? `Content script error: ${lastError}` : 'Content script did not respond. Try reloading the page.';
+              console.error('[background]', error, toolCallMsg);
+              if (port) port.postMessage({ type: 'tool_result', id: toolCallMsg.id, result: { error }, elapsedMs: 0 });
+              return;
+            }
+            if (res && port) {
+              port.postMessage(res);
+            }
+          });
+        }
+        forwardToolCall();
       });
     } else {
       chrome.runtime.sendMessage(msg, () => {
