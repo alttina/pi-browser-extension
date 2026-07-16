@@ -28,6 +28,16 @@ process.on('unhandledRejection', (reason: unknown) => {
   sendError(`Host error: ${message}`);
 });
 
+// Chrome may close the native-messaging pipe at any moment (extension reloads,
+// service worker cycling out). Swallow the resulting EPIPE on stdout so we
+// don't crash — the stdin 'end'/'close' handlers already exit cleanly.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') {
+    process.exit(0);
+  }
+  console.error('[host] stdout error:', err);
+});
+
 const pendingToolCalls = new Map<
   string,
   { resolve: (msg: ToolResultMessage) => void; reject: (err: Error) => void; timeout: NodeJS.Timeout }
@@ -135,10 +145,14 @@ async function main() {
   process.stdin.on('end', () => {
     console.error('[host] stdin ended');
     host.dispose();
+    // Chrome has closed the pipe; any further stdout write triggers EPIPE.
+    // Exit cleanly so we don't crash and pollute host-stderr.log.
+    process.exit(0);
   });
   process.stdin.on('close', () => {
     console.error('[host] stdin closed');
     host.dispose();
+    process.exit(0);
   });
 }
 
