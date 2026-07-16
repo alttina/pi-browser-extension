@@ -86,7 +86,7 @@ function connectPort() {
   port.onMessage.addListener((msg: Message) => {
     if (msg.type === 'tool_call' && !msg.ui) {
       const toolCallMsg = msg as Extract<Message, { type: 'tool_call' }>;
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
         const tab = tabs[0];
         const tabId = tab?.id;
         if (!tabId) {
@@ -183,7 +183,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
   if (msg.type === 'capture_tab') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
       const tab = tabs[0];
       const windowId = tab?.windowId;
       if (!windowId) {
