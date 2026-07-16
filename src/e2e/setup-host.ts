@@ -30,8 +30,16 @@ export function setupHost(profileDir: string, logDir?: string): HostSetup {
   const wrapperName = `host-wrapper-${basename(profileDir)}.sh`;
   const wrapperPath = join(projectRoot, 'dist/e2e', wrapperName);
 
+  // Thinking level: default to `low` — per Anthropic's published guidance
+  // for high-throughput / cost-sensitive workloads, low thinking uses fewer
+  // total output tokens than off (the model makes fewer mistakes and needs
+  // fewer retries) while matching or slightly exceeding no-thinking accuracy.
+  // Medium is only recommended when one-shot correctness matters more than
+  // wall-clock budget. Callers can override by setting PI_THINKING_LEVEL in
+  // the parent environment before invoking the E2E runner.
+  const thinkingLevel = process.env.PI_THINKING_LEVEL || 'low';
   const logDirLine = logDir ? `export PI_BROWSER_AGENT_LOG_DIR=${logDir}\n` : '';
-  const wrapper = `#!/bin/bash\ncd ${projectRoot}\nexport PI_THINKING_LEVEL=off\n${logDirLine}exec node ${hostIndex}\n`;
+  const wrapper = `#!/bin/bash\ncd ${projectRoot}\nexport PI_THINKING_LEVEL=${thinkingLevel}\n${logDirLine}exec node ${hostIndex}\n`;
 
   mkdirSync(resolve('dist/e2e'), { recursive: true });
   writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
