@@ -42,6 +42,7 @@ nav a:hover { color: var(--text); }
 main { padding: 24px; max-width: 800px; margin: 0 auto; }
 
 .view.hidden { display: none; }
+.hidden { display: none; }
 
 .btn {
   display: inline-block;
