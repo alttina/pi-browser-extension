@@ -17,6 +17,10 @@ const wrapper = `#!/bin/bash
 # Auto-generated native messaging host wrapper for Pi Browser Agent.
 # Chrome launches this script directly; it then runs the Node host.
 export PATH="${projectRoot}/node_modules/.bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.pi/bin:$PATH"
+# Default thinking level to 'low' — matches what the E2E suite runs with, so
+# behavior is consistent between benchmark and real Chrome usage. Callers can
+# override by exporting PI_THINKING_LEVEL before launching Chrome.
+export PI_THINKING_LEVEL="\${PI_THINKING_LEVEL:-low}"
 cd "${projectRoot}"
 exec node "${hostPath}" 2>>"${logFile}"
 `;
