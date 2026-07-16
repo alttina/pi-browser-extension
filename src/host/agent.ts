@@ -45,6 +45,13 @@ Hard rules:
 5. After each action that changes page state, verify with another screenshot or browser_get_text before deciding the next step.
 6. Once the intent is fully satisfied, respond in one or two sentences summarizing what you did, and stop calling tools.
 
+Recovery from failed actions:
+- If a tool returns { error: "Element not found: <selector>" }, the CSS selector you invented was wrong. DO NOT retry with a similar guess. Your next action MUST be browser_find_element (with a natural-language description of the target) or browser_get_text on the surrounding area to see the real DOM before choosing a new selector.
+- The same rule applies to browser_type when the target input is not found.
+- If two consecutive tool calls both fail on the same page, take a fresh browser_screenshot and reconsider whether you are on the right page or whether the previous action succeeded silently.
+- Do not use Playwright-specific pseudo-classes like :has-text() or :contains() — they are not valid CSS and browser_click/browser_type will always fail with them. Use browser_find_element with a text-based description instead.
+- Do not invent framework-specific class names like .card, .btn-danger, .btn-success just because they are common on the web. Confirm classes exist via browser_find_element or browser_get_text before clicking.
+
 Reasoning style: think briefly, act, verify. Do not narrate long plans before you have looked at the page.`;
 
 export type SendToExtension = (toolCall: ToolCallMessage) => Promise<ToolResultMessage>;
@@ -72,8 +79,8 @@ export class AgentHost {
     return [
       this.defineTool('browser_screenshot', ScreenshotSchema, 'Take a screenshot of the current browser tab.', 'Use this to observe the page state after actions or before deciding.'),
       this.defineTool('browser_scroll', ScrollSchema, 'Scroll the page or a specific element into view.', 'Use this when content is below the fold or when targeting an element that is not visible.'),
-      this.defineTool('browser_click', ClickSchema, 'Click an element on the page.', 'Use this to press buttons, follow links, or select options.'),
-      this.defineTool('browser_type', TypeSchema, 'Type text into an input or textarea.', 'Use this to fill forms or search boxes.'),
+      this.defineTool('browser_click', ClickSchema, 'Click an element on the page.', 'Use this to press buttons, follow links, or select options. If it returns "Element not found", call browser_find_element next with a description of the target; do not retry with a guessed selector variant.'),
+      this.defineTool('browser_type', TypeSchema, 'Type text into an input or textarea.', 'Use this to fill forms or search boxes. If the input is not found, call browser_find_element first to get a real selector.'),
       this.defineTool('browser_navigate', NavigateSchema, 'Navigate the current tab to a URL.', 'Use this to open a new page when the user asks.'),
       this.defineTool('browser_get_text', GetTextSchema, 'Get the visible text content of the page or an element.', 'Use this to read page content or extract specific text.'),
       this.defineTool('browser_find_element', FindElementSchema, 'Find interactive elements or verify a candidate selector.', 'Use this to locate buttons, links, inputs, or confirm a selector exists.'),
