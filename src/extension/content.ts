@@ -31,6 +31,28 @@ function elementText(el: Element): string {
   );
 }
 
+/**
+ * Detect Playwright-only pseudo-classes (:has-text, :nth-match, :hasText)
+ * that browsers do not implement. Agents keep reaching for them despite the
+ * system-prompt ban, so we return a hard, actionable error here instead of
+ * letting the click fall through to a generic "Element not found".
+ * `:contains(...)` is intentionally NOT rejected — resolveElement's fallback
+ * salvages that syntax by extracting the text and doing a real DOM search.
+ */
+const PLAYWRIGHT_ONLY_PSEUDO = /:(has-text|hasText|nth-match)\s*\(/i;
+
+function rejectPlaywrightPseudo(selector: string): void {
+  const match = selector.match(PLAYWRIGHT_ONLY_PSEUDO);
+  if (!match) return;
+  const pseudo = match[0].replace(/\s*\($/, '');
+  throw new Error(
+    `Selector "${selector}" uses ${pseudo}, a Playwright-only pseudo-class that browsers do not implement. ` +
+      `document.querySelector cannot match this and never will. Do not retry with a variant. ` +
+      `Call browser_find_element with a natural-language description of the target ` +
+      `(for example: "Log in button in the header", "Add to cart button for USB-C Hub").`,
+  );
+}
+
 function containsText(el: Element, query: string): boolean {
   return elementText(el).toLowerCase().includes(query.toLowerCase());
 }
@@ -132,6 +154,7 @@ async function scrollTool(args: Record<string, unknown>): Promise<ToolResult> {
 
 async function clickTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { selector } = args as { selector: string };
+  rejectPlaywrightPseudo(selector);
   const start = performance.now();
   const el = resolveElement(selector, 'button');
   if (!el) throw new Error(`Element not found: ${selector}`);
@@ -164,6 +187,7 @@ async function screenshotTool(args: Record<string, unknown>): Promise<ToolResult
 
 async function typeTool(args: Record<string, unknown>): Promise<ToolResult> {
   const { selector, text, submit } = args as { selector: string; text: string; submit?: boolean };
+  rejectPlaywrightPseudo(selector);
   const start = performance.now();
   const el = resolveElement(selector) as HTMLInputElement | HTMLTextAreaElement | null;
   if (!el) throw new Error(`Element not found: ${selector}`);
