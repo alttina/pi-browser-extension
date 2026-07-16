@@ -173,7 +173,10 @@ async function run() {
   console.log(`Fixture server: ${fixtureUrl}`);
 
   const profileDir = mkdtempSync(join(tmpdir(), 'pi-browser-agent-e2e-'));
-  const logDir = join(process.cwd(), 'e2e-context-logs', `${mode}-${Date.now()}`);
+  // Include pid so parallel E2E processes that start within the same
+  // millisecond don't collide on the same logDir and overwrite each other's
+  // summary.json.
+  const logDir = join(process.cwd(), 'e2e-context-logs', `${mode}-${Date.now()}-${process.pid}`);
   mkdirSync(logDir, { recursive: true });
   const hostSetup = setupHost(profileDir, logDir);
   console.log(`Profile: ${profileDir}`);
