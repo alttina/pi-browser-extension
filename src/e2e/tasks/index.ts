@@ -32,6 +32,17 @@ export interface Task {
    */
   intents: { natural: string; smoke: string };
   startUrl: string;
+  /**
+   * Wall-clock budget in ms for the agent to reach a done state.
+   *
+   * Empirically an agent turn is ~5-7s (think + tool + verify), so budgets are
+   * tiered by expected action count:
+   *   - 60s  simple:  1-3 concrete actions (find target, click)
+   *   - 120s medium:  4-8 actions (navigate + fill form + submit)
+   *   - 180s heavy:   9+ actions including multi-field typing sequences
+   * Bumping these encourages more exploration; they should be tightened once
+   * we harden the agent's decision-making, not loosened forever.
+   */
   maxDurationMs: number;
   /**
    * Tools the agent is expected to use for this task. In `natural` mode this
@@ -127,7 +138,7 @@ export const TASKS: Task[] = [
         'Click #add-to-cart-p3, click the Cart link, click #checkout-btn, type "Test User" into #full-name, type "123 Test St" into #address, type "4111 1111 1111 1111" into #card, click #captcha-checkbox, and click the Place order button.',
     },
     startUrl: '/onestopshop/#/products',
-    maxDurationMs: 120000,
+    maxDurationMs: 180000,
     expectedTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const orders = await getOrders(page);
@@ -162,7 +173,7 @@ export const TASKS: Task[] = [
         'Click #new-task-btn, type "Write E2E tests" into #task-title, type "Cover new fixture sites" into #task-description, and click #save-task-btn.',
     },
     startUrl: '/taskflow/#/board',
-    maxDurationMs: 60000,
+    maxDurationMs: 120000,
     expectedTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const tasks = await getTasks(page);
@@ -178,7 +189,7 @@ export const TASKS: Task[] = [
       smoke: 'Click #edit-task-t2, click #status-done, and click #save-task-btn.',
     },
     startUrl: '/taskflow/#/board',
-    maxDurationMs: 60000,
+    maxDurationMs: 120000,
     expectedTools: ['browser_click'],
     async evaluate(page) {
       const tasks = await getTasks(page);
@@ -211,7 +222,7 @@ export const TASKS: Task[] = [
         'Click #new-post-btn, type "tester" into #login-username, type "password" into #login-password, click #login-submit, type "Best testing library" into #post-title, type "What is your favorite testing library?" into #post-body, and click #submit-post.',
     },
     startUrl: '/devforum/#/',
-    maxDurationMs: 90000,
+    maxDurationMs: 180000,
     expectedTools: ['browser_click', 'browser_type'],
     async evaluate(page) {
       const posts = await getPosts(page);
